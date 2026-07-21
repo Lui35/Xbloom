@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -97,6 +98,35 @@ class EnhanceRecipeRequest(BaseModel):
     rating: int | None = Field(default=None, ge=1, le=5)
 
 
+def normalize_ai_recipe(raw: str) -> dict[str, Any]:
+    """Accept harmless model deviations while preserving machine safety limits."""
+    data = json.loads(raw)
+    rpms = (60, 70, 80, 90, 100, 110, 120)
+    data["rpm"] = min(rpms, key=lambda value: abs(value - float(data.get("rpm", 80))))
+    data["grind"] = max(1, min(80, round(float(data.get("grind", 50)))))
+    data["dose"] = max(5, min(30, float(data.get("dose", 18))))
+    data["name"] = str(data.get("name") or "AI coffee recipe")[:80]
+    data["rationale"] = str(data.get("rationale") or "Balanced for the selected coffee.")[:500]
+    patterns = {"centre": "center", "central": "center", "circle": "circular"}
+    pours = data.get("pours")
+    if not isinstance(pours, list) or not pours:
+        raise ValueError("The response did not contain any pour steps.")
+    normalized = []
+    for pour in pours[:8]:
+        pattern = patterns.get(str(pour.get("pattern", "center")).lower(), str(pour.get("pattern", "center")).lower())
+        normalized.append({
+            "volume": max(0, min(100, round(float(pour.get("volume", 0))))),
+            "temp": max(80, min(96, round(float(pour.get("temp", 93))))),
+            "flow": max(3.0, min(3.5, float(pour.get("flow", 3.2)))),
+            "pauseAfter": max(0, min(60, round(float(pour.get("pauseAfter", 0))))),
+            "pattern": pattern if pattern in ("center", "circular", "spiral") else "center",
+            "agitationBefore": bool(pour.get("agitationBefore", False)),
+            "agitationAfter": bool(pour.get("agitationAfter", False)),
+        })
+    data["pours"] = normalized
+    return data
+
+
 async def ask_gemini(prompt: str) -> AIRecipeResult:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
@@ -110,24 +140,35 @@ async def ask_gemini(prompt: str) -> AIRecipeResult:
         },
     }
     try:
-        async with httpx.AsyncClient(timeout=45) as session:
+        async with httpx.AsyncClient(timeout=35) as session:
             response = None
+            transport_error = None
             models = [os.getenv("GEMINI_MODEL", "gemini-3.5-flash"), os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")]
             for model in dict.fromkeys(models):
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-                response = await session.post(url, headers={"x-goog-api-key": api_key}, json=body)
+                try:
+                    response = await session.post(url, headers={"x-goog-api-key": api_key}, json=body)
+                except httpx.RequestError as error:
+                    transport_error = error
+                    continue
                 if response.status_code not in (429, 503):
                     break
-        assert response is not None
+        if response is None:
+            reason = type(transport_error).__name__ if transport_error else "no response"
+            raise HTTPException(502, f"Gemini did not respond ({reason}). Please try again.")
         if response.status_code >= 400:
             detail = response.json().get("error", {}).get("message", "Gemini request failed")
             raise HTTPException(502, detail)
-        text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
-        result = AIRecipeResult.model_validate_json(text)
+        try:
+            text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        except (KeyError, IndexError, TypeError) as error:
+            raise HTTPException(502, "Gemini returned an empty response. Please try again.") from error
+        result = AIRecipeResult.model_validate(normalize_ai_recipe(text))
     except HTTPException:
         raise
     except Exception as error:
-        raise HTTPException(502, f"Gemini returned an invalid recipe: {error}") from error
+        detail = str(error).strip() or type(error).__name__
+        raise HTTPException(502, f"Gemini returned an invalid recipe: {detail}") from error
     total = sum(p.volume for p in result.pours)
     if total > 500:
         raise HTTPException(502, "The AI recipe exceeded the machine's 500 ml safety limit.")
