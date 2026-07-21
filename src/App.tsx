@@ -1332,7 +1332,7 @@ function App() {
                       <div className="summary-pattern"><PatternGlyph pattern={p.pattern} active={state==='current'}/><strong>{p.temp}°C</strong></div>
                       <span className="summary-step-name">{i===0?'Bloom':`Pour ${i+1}`}</span>
                       <div className="summary-facts"><span>{p.pauseAfter}<small>sec</small></span></div>
-                      {(p.agitationBefore||p.agitationAfter)&&<div className="live-agitations">{p.agitationBefore&&<span className="before"><Waves size={12}/>Before</span>}{p.agitationAfter&&<span className="after">After<Waves size={12}/></span>}</div>}
+                      {(p.agitationBefore||p.agitationAfter)&&<div className="live-agitations">{p.agitationBefore&&<span className="before" title="Agitation before" aria-label="Agitation before"><Waves size={13}/></span>}{p.agitationAfter&&<span className="after" title="Agitation after" aria-label="Agitation after"><Waves size={13}/></span>}</div>}
                       <span className="live-step-state">{!brewTimingStarted?'Waiting':state==='current'?brewEstimate.phase:state==='done'?'Done':'Waiting'}</span>
                     </article>
                   );
