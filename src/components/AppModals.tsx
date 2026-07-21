@@ -146,8 +146,14 @@ export function AppModals({ controller }: { controller: AppController }) {
                 {processDetail.label}
                 <input
                   placeholder={processDetail.placeholder}
-                  value={aiBean.process_detail || aiBean.infused_with || ""}
-                  onChange={(e) => setAiBean({ ...aiBean, process_detail: e.target.value })}
+                  value={aiBean.process_detail || ""}
+                  onChange={(e) =>
+                    setAiBean({
+                      ...aiBean,
+                      process_detail: e.target.value,
+                      infused_with: undefined,
+                    })
+                  }
                 />
               </label>
               <label>
