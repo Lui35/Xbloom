@@ -1,4 +1,5 @@
 import asyncio
+import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,6 +8,10 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(PROJECT_ROOT / ".env")
 
 PYBLOOM_SRC = Path(__file__).resolve().parents[2] / "PyBloom" / "src"
 if not PYBLOOM_SRC.exists():
@@ -81,7 +86,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://127.0.0.1:5173", "http
 
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "pybloom": str(PYBLOOM_SRC)}
+    return {"ok": True, "pybloom": str(PYBLOOM_SRC), "aiConfigured": bool(os.getenv("GEMINI_API_KEY"))}
 
 
 @app.get("/api/devices")
