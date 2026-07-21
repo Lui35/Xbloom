@@ -49,8 +49,25 @@ export function BeansPage({
         </div>
       </div>
       {beanPhotoError && <p className="bean-photo-error">{beanPhotoError}</p>}
-      {beans.length ? (
+      {beans.length || beanPhotoLoading ? (
         <div className="bean-library">
+          {beanPhotoLoading && (
+            <article className="bean-processing-card" aria-live="polite">
+              <div className="bean-scan-visual">
+                <Coffee />
+                <span />
+              </div>
+              <div>
+                <p className="eyebrow">AI LABEL SCAN</p>
+                <h3>Building your bean profile</h3>
+                <ul>
+                  <li>Reading the package</li>
+                  <li>Finding origin and process</li>
+                  <li>Organizing tasting details</li>
+                </ul>
+              </div>
+            </article>
+          )}
           {beans.map((bean) => {
             const detail = bean.process_detail || bean.infused_with;
             return (

@@ -1,4 +1,4 @@
-import { Download, Upload } from "lucide-react";
+import { FileInput, FileOutput } from "lucide-react";
 import type { AppController } from "../controllers/useAppController";
 import { initialRecipes } from "../domain/recipes";
 
@@ -48,7 +48,7 @@ export function SettingsPage({ controller }: { controller: AppController }) {
           </div>
           <span>
             <label className="import-library">
-              <Upload size={16} /> Import
+              <FileInput size={16} /> Import library
               <input
                 type="file"
                 accept="application/json,.json"
@@ -60,7 +60,7 @@ export function SettingsPage({ controller }: { controller: AppController }) {
               />
             </label>
             <button onClick={exportLibrary}>
-              <Download size={16} /> Export
+              <FileOutput size={16} /> Export library
             </button>
           </span>
         </div>

@@ -1,4 +1,4 @@
-import { Coffee, LoaderCircle, Save, Sparkles, X } from "lucide-react";
+import { CheckCircle2, Circle, Coffee, LoaderCircle, Save, Sparkles, X } from "lucide-react";
 import type { AIBeanProfile } from "../api";
 import type { AppController } from "../controllers/useAppController";
 import { processDetailConfig } from "../domain/beanProcessing";
@@ -151,8 +151,8 @@ export function AppModals({ controller }: { controller: AppController }) {
                         key={level}
                         type="button"
                         role="radio"
-                        aria-checked={(aiBean.acidity || 3) === level}
-                        className={(aiBean.acidity || 3) >= level ? "active" : ""}
+                        aria-checked={aiBean.acidity === level}
+                        className={aiBean.acidity && aiBean.acidity >= level ? "active" : ""}
                         onClick={() =>
                           setAiBean({ ...aiBean, acidity: level as 1 | 2 | 3 | 4 | 5 })
                         }
@@ -165,11 +165,19 @@ export function AppModals({ controller }: { controller: AppController }) {
                   </span>
                   <output>
                     {
-                      (["", "Very low", "Low", "Balanced", "Bright", "Very bright"] as const)[
-                        aiBean.acidity || 3
-                      ]
+                      (
+                        ["Unknown", "Very low", "Low", "Balanced", "Bright", "Very bright"] as const
+                      )[aiBean.acidity || 0]
                     }
                   </output>
+                  <button
+                    type="button"
+                    className="acidity-clear"
+                    onClick={() => setAiBean({ ...aiBean, acidity: undefined })}
+                    disabled={!aiBean.acidity}
+                  >
+                    Clear
+                  </button>
                 </div>
               </fieldset>
               <label>
@@ -288,7 +296,7 @@ export function AppModals({ controller }: { controller: AppController }) {
                 </span>
               )}
             </div>
-            {!aiResult && aiMode === "create" && (
+            {!aiResult && !aiLoading && aiMode === "create" && (
               <div className="ai-form">
                 <label>
                   Brew style
@@ -319,7 +327,7 @@ export function AppModals({ controller }: { controller: AppController }) {
                 </label>
               </div>
             )}
-            {!aiResult && aiMode === "enhance" && (
+            {!aiResult && !aiLoading && aiMode === "enhance" && (
               <div className="ai-feedback">
                 <label>
                   How did it taste?
@@ -365,12 +373,30 @@ export function AppModals({ controller }: { controller: AppController }) {
             )}
             {aiLoading && (
               <div className="ai-generating" role="status" aria-live="polite">
-                <LoaderCircle />
-                <div>
-                  <strong>Designing your recipe</strong>
-                  <span>Gemini is balancing the grind, temperature, and pours.</span>
-                  <small>{aiElapsed}s elapsed · usually ready within 20–40 seconds</small>
+                <div className="ai-generating-orbit">
+                  <Sparkles />
                 </div>
+                <p className="eyebrow">AI RECIPE CRAFT</p>
+                <h3>Brewing the numbers for you</h3>
+                <p>Turning your coffee profile into a deliberate xBloom recipe.</p>
+                <div className="ai-stage-list">
+                  {[
+                    [0, "Reading the bean profile"],
+                    [4, "Calculating dose and water"],
+                    [8, "Shaping pours and agitation"],
+                    [12, "Running barista quality checks"],
+                  ].map(([threshold, label], index, stages) => {
+                    const done = aiElapsed >= Number(stages[index + 1]?.[0] ?? Infinity);
+                    const active = aiElapsed >= Number(threshold) && !done;
+                    return (
+                      <span className={done ? "done" : active ? "active" : ""} key={String(label)}>
+                        {done ? <CheckCircle2 /> : active ? <LoaderCircle /> : <Circle />}
+                        {label}
+                      </span>
+                    );
+                  })}
+                </div>
+                <small>{aiElapsed}s elapsed · usually ready within 20–40 seconds</small>
               </div>
             )}
             {aiError && (

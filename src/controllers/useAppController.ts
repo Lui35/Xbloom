@@ -281,14 +281,15 @@ export function useAppController() {
         image_base64: dataUrl.split(",", 2)[1],
         mime_type: file.type,
       });
-      setAiBean({
+      const importedBean: Bean = {
         ...blankBean(),
         ...scanned,
         id: Date.now(),
         name: scanned.name || file.name.replace(/\.[^.]+$/, ""),
-      });
-      setSelectedBeanId(null);
-      setBeanEditor(true);
+      };
+      saveBeans([...beans, importedBean]);
+      setAiBean(importedBean);
+      setSelectedBeanId(importedBean.id);
     } catch (error) {
       setBeanPhotoError(
         error instanceof Error ? error.message : "The coffee label could not be read.",
