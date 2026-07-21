@@ -91,7 +91,7 @@ export function useAppController() {
     brewerWasActive = useRef(false),
     brewWeightBaseline = useRef(0),
     brewRecorded = useRef(false);
-  const [nav, setNav] = useState("Home");
+  const [nav, setNavState] = useState("Home");
   const navItems = useMemo(
     () => [
       { name: "Home", icon: LayoutDashboard },
@@ -102,6 +102,35 @@ export function useAppController() {
     ],
     [],
   );
+
+  function setNav(next: string) {
+    if (nav === "Recipes" && next !== "Recipes" && recipeDirty) {
+      setRecipes(structuredClone(savedRecipes.current));
+      setRecipeDirty(false);
+    }
+    if (beanEditor) {
+      setBeanEditor(false);
+      setAiBean(blankBean());
+      setSelectedBeanId(null);
+    }
+    setNavState(next);
+  }
+
+  useEffect(() => {
+    if (!libraryMessage) return;
+    const timer = window.setTimeout(() => setLibraryMessage(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [libraryMessage]);
+  useEffect(() => {
+    if (!recipeTransferMessage) return;
+    const timer = window.setTimeout(() => setRecipeTransferMessage(""), 4000);
+    return () => window.clearTimeout(timer);
+  }, [recipeTransferMessage]);
+  useEffect(() => {
+    if (!beanPhotoError) return;
+    const timer = window.setTimeout(() => setBeanPhotoError(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [beanPhotoError]);
 
   useEffect(() => {
     if (!brewing || !brewTimingStarted) return;
@@ -519,7 +548,6 @@ export function useAppController() {
   }
   function selectRecipe(id: number) {
     if (id === selected.id) return;
-    if (recipeDirty && !window.confirm("Discard your unsaved recipe changes?")) return;
     if (recipeDirty) setRecipes(structuredClone(savedRecipes.current));
     setRecipeDirty(false);
     setSelectedId(savedRecipes.current.some((r) => r.id === id) ? id : savedRecipes.current[0].id);
