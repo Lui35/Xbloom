@@ -1140,10 +1140,10 @@ function App() {
                       </div>
                       <span className="summary-step-name">{i===0?'Bloom':`Pour ${i+1}`}</span>
                       <div className="summary-facts">
-                        <span>{p.flow.toFixed(1)}<small>ml/s</small></span>
+                        <span>{p.pauseAfter}<small>sec</small></span>
                       </div>
                       {p.agitationBefore&&<span className="pause-corner before"><Waves size={12}/></span>}
-                      <span className="pause-corner after">{p.pauseAfter}s {p.agitationAfter&&<Waves size={12}/>}</span>
+                      {p.agitationAfter&&<span className="pause-corner after"><Waves size={12}/></span>}
                     </article>
                   ))}
                 </div>
