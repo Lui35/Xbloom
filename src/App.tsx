@@ -9,13 +9,14 @@ import {
   Radio,
   Save,
   Settings,
+  Sparkles,
   Thermometer,
   Trash2,
   Waves,
   Weight,
   X,
 } from "lucide-react";
-import { MachineStatus, xbloomApi } from "./api";
+import { AIBeanProfile, AIRecipeResult, MachineStatus, xbloomApi } from "./api";
 
 type Pour = {
   volume: number;
@@ -41,6 +42,7 @@ type Recipe = {
   dose: number;
   unit: "g" | "ml";
   useGrinder: boolean;
+  bean?: AIBeanProfile;
   pours: Pour[];
 };
 const initialRecipes: Recipe[] = [
@@ -462,6 +464,13 @@ function App() {
   });
   const savedRecipes = useRef<Recipe[]>(structuredClone(recipes));
   const [recipeDirty, setRecipeDirty] = useState(false);
+  const [aiMode,setAiMode]=useState<"create"|"enhance"|null>(null);
+  const [aiLoading,setAiLoading]=useState(false);
+  const [aiError,setAiError]=useState("");
+  const [aiResult,setAiResult]=useState<AIRecipeResult|null>(null);
+  const [aiFeedback,setAiFeedback]=useState("");
+  const [aiRating,setAiRating]=useState(4);
+  const [aiBean,setAiBean]=useState<AIBeanProfile>({brew_style:"hot",brewer:"xBloom Omni",dose:18,target_water:288,country:"",region:"",producer:"",species:"Arabica",variety:"",process:"Washed",roast_level:"Medium-light",tasting_notes:"",desired_cup:""});
   const [selectedId, setSelectedId] = useState(1);
   const selected = recipes.find((r) => r.id === selectedId) || recipes[0];
   const [machineName, setMachineName] = useState(
@@ -578,6 +587,14 @@ function App() {
     savedRecipes.current = structuredClone(recipes);
     setRecipeDirty(false);
   }
+  function openAI(mode:"create"|"enhance") { setAiMode(mode);setAiResult(null);setAiError("");setAiFeedback("");if(mode==="enhance"&&selected.bean)setAiBean(selected.bean) }
+  async function runAI() {
+    setAiLoading(true);setAiError("");setAiResult(null);
+    try { setAiResult(aiMode==="enhance"?await xbloomApi.enhanceRecipe({bean:selected.bean,recipe:selected,feedback:aiFeedback,rating:aiRating}):await xbloomApi.generateRecipe(aiBean)) }
+    catch(error){setAiError(error instanceof Error?error.message:"AI recipe generation failed.")}
+    finally{setAiLoading(false)}
+  }
+  function saveAIRecipe(){if(!aiResult)return;const total=aiResult.pours.reduce((sum,p)=>sum+p.volume,0);const id=Date.now();const sourceBean=aiMode==="enhance"?(selected.bean||aiBean):aiBean;const recipe:Recipe={id,name:aiResult.name,roaster:aiMode==="enhance"?selected.roaster:"AI generated",origin:[sourceBean.country,sourceBean.region].filter(Boolean).join(" · ")||"AI coffee profile",temp:aiResult.pours[0].temp,ratio:`1:${(total/aiResult.dose).toFixed(1)}`,duration:formatTime(Math.round(aiResult.pours.reduce((sum,p)=>sum+p.volume/p.flow+p.pauseAfter,0))),color:aiMode==="enhance"?selected.color:"#8aa76b",grind:aiResult.grind,rpm:aiResult.rpm,dose:aiResult.dose,unit:"ml",useGrinder:true,bean:sourceBean,pours:aiResult.pours.map((p,i)=>({...p,pauseBefore:i===0?5:0}))};const next=[...recipes,recipe];setRecipes(next);setSelectedId(id);setRecipeDirty(true);setAiMode(null);setAiResult(null)}
   function selectRecipe(id: number) {
     if (id === selected.id) return;
     if (recipeDirty && !window.confirm("Discard your unsaved recipe changes?")) return;
@@ -826,6 +843,23 @@ function App() {
           </div>
         )}
 
+        {aiMode&&<div className="ai-modal-backdrop" role="presentation"><section className="ai-modal" role="dialog" aria-modal="true" aria-labelledby="ai-title"><header><div><p className="eyebrow">AI RECIPE LAB</p><h2 id="ai-title">{aiMode==="create"?"Create a recipe":"Enhance your recipe"}</h2><p>{aiMode==="create"?"Tell Gemini about your coffee and the cup you want.":`Improve “${selected.name}” from your tasting experience.`}</p></div><button onClick={()=>setAiMode(null)} aria-label="Close"><X/></button></header>
+          {!aiResult&&aiMode==="create"&&<div className="ai-form">
+            <label>Brew style<select value={aiBean.brew_style} onChange={e=>setAiBean({...aiBean,brew_style:e.target.value as AIBeanProfile['brew_style']})}><option value="hot">Hot</option><option value="iced">Iced pour-over</option><option value="cold">Cold</option></select></label>
+            <label>Brewer<select value={aiBean.brewer} onChange={e=>setAiBean({...aiBean,brewer:e.target.value})}>{["xBloom Omni","V60","Kalita Wave","Origami","Orea","April","Chemex","Other"].map(v=><option key={v}>{v}</option>)}</select></label>
+            <label>Dose (g)<input type="number" min="5" max="30" value={aiBean.dose} onChange={e=>setAiBean({...aiBean,dose:+e.target.value})}/></label><label>Target water (ml)<input type="number" min="30" max="500" value={aiBean.target_water} onChange={e=>setAiBean({...aiBean,target_water:+e.target.value})}/></label>
+            <label>Country<input placeholder="e.g. Colombia" value={aiBean.country||""} onChange={e=>setAiBean({...aiBean,country:e.target.value})}/></label><label>Region<input placeholder="e.g. Huila" value={aiBean.region||""} onChange={e=>setAiBean({...aiBean,region:e.target.value})}/></label>
+            <label>Producer / farm<input value={aiBean.producer||""} onChange={e=>setAiBean({...aiBean,producer:e.target.value})}/></label><label>Species<select value={aiBean.species||""} onChange={e=>setAiBean({...aiBean,species:e.target.value})}><option value="">Optional</option><option>Arabica</option><option>Robusta</option><option>Liberica</option></select></label>
+            <label>Variety<input placeholder="e.g. Pink Bourbon" value={aiBean.variety||""} onChange={e=>setAiBean({...aiBean,variety:e.target.value})}/></label><label>Process<select value={aiBean.process||""} onChange={e=>setAiBean({...aiBean,process:e.target.value})}>{["Washed","Natural","Honey","Anaerobic","Carbonic maceration","Wet-hulled","Co-fermented","Infused","Decaffeinated","Experimental / other"].map(v=><option key={v}>{v}</option>)}</select></label>
+            <label>Altitude (masl)<input type="number" min="0" max="3000" placeholder="Optional" value={aiBean.altitude_masl||""} onChange={e=>setAiBean({...aiBean,altitude_masl:e.target.value?+e.target.value:undefined})}/></label><label>Roast level<select value={aiBean.roast_level||""} onChange={e=>setAiBean({...aiBean,roast_level:e.target.value})}><option value="">Optional</option><option>Light</option><option>Medium-light</option><option>Medium</option><option>Medium-dark</option><option>Dark</option></select></label>
+            <label className="wide">Tasting notes<input placeholder="e.g. strawberry, cacao, floral" value={aiBean.tasting_notes||""} onChange={e=>setAiBean({...aiBean,tasting_notes:e.target.value})}/></label><label className="wide">Cup goal<textarea placeholder="More sweetness, high clarity, tea-like body…" value={aiBean.desired_cup||""} onChange={e=>setAiBean({...aiBean,desired_cup:e.target.value})}/></label>
+          </div>}
+          {!aiResult&&aiMode==="enhance"&&<div className="ai-feedback"><label>How did it taste?<textarea autoFocus placeholder="It was slightly sour and thin. I want more sweetness and body…" value={aiFeedback} onChange={e=>setAiFeedback(e.target.value)}/></label><label>Overall rating<select value={aiRating} onChange={e=>setAiRating(+e.target.value)}>{[1,2,3,4,5].map(v=><option value={v} key={v}>{v} / 5</option>)}</select></label><div className="feedback-chips">{["Too sour","Too bitter","Too weak","Too strong","More sweetness","More clarity","More body","Too dry"].map(text=><button key={text} onClick={()=>setAiFeedback(value=>`${value}${value?' ':''}${text}.`)}>{text}</button>)}</div></div>}
+          {aiError&&<p className="ai-error" role="alert">{aiError}</p>}
+          {aiResult&&<div className="ai-preview"><div><Sparkles/><span><small>AI SUGGESTION</small><h3>{aiResult.name}</h3><p>{aiResult.rationale}</p></span></div><div className="ai-preview-stats"><span>Grind <b>{aiResult.grind}</b></span><span>Speed <b>{aiResult.rpm} RPM</b></span><span>Dose <b>{aiResult.dose}g</b></span><span>Water <b>{aiResult.pours.reduce((s,p)=>s+p.volume,0)}ml</b></span></div><div className="ai-preview-pours">{aiResult.pours.map((p,i)=><span key={i}><b>{i+1}</b>{p.volume}ml · {p.temp}° · {p.flow.toFixed(1)}ml/s</span>)}</div></div>}
+          <footer>{aiResult?<><button className="ai-secondary" onClick={()=>setAiResult(null)}>Try again</button><button className="ai-submit" onClick={saveAIRecipe}><Save size={17}/> Save as new recipe</button></>:<><button className="ai-secondary" onClick={()=>setAiMode(null)}>Cancel</button><button className="ai-submit" disabled={aiLoading||(aiMode==="enhance"&&aiFeedback.trim().length<3)} onClick={runAI}><Sparkles size={17}/>{aiLoading?"Designing recipe…":aiMode==="create"?"Generate recipe":"Create improved copy"}</button></>}</footer>
+        </section></div>}
+
         {nav === "Recipes" && (
           <section className="editor-page">
             <div className="page-heading">
@@ -834,6 +868,7 @@ function App() {
                 <h2>Edit your brew</h2>
               </div>
               <div className="recipe-actions">
+                <button className="ai-button" onClick={()=>openAI("create")}><Sparkles size={17}/> Create with AI</button>
                 <button className="save-recipe" onClick={saveRecipeChanges} disabled={!recipeDirty}>
                   <Save size={17} /> {recipeDirty ? "Save changes" : "Saved"}
                 </button>
@@ -887,6 +922,7 @@ function App() {
                     />
                   </label>
                 </div>
+                <button className="ai-enhance-card" onClick={()=>openAI("enhance")}><span><Sparkles size={20}/></span><div><strong>Enhance this recipe with AI</strong><small>Describe the taste, then create an improved copy without overwriting this recipe.</small></div><b>→</b></button>
                 <section className="basics-card">
                   <div className="subsection-heading">
                     <div>

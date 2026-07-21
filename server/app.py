@@ -3,8 +3,9 @@ import os
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -52,6 +53,87 @@ class BrewRequest(BaseModel):
     confirmed: bool = False
 
 
+class BeanProfile(BaseModel):
+    brew_style: Literal["hot", "iced", "cold"]
+    brewer: str = Field(min_length=1, max_length=60)
+    dose: float = Field(ge=5, le=30)
+    target_water: int = Field(ge=30, le=500)
+    country: str | None = Field(default=None, max_length=80)
+    region: str | None = Field(default=None, max_length=100)
+    producer: str | None = Field(default=None, max_length=100)
+    species: str | None = Field(default=None, max_length=50)
+    variety: str | None = Field(default=None, max_length=100)
+    process: str | None = Field(default=None, max_length=100)
+    altitude_masl: int | None = Field(default=None, ge=0, le=3000)
+    roast_level: str | None = Field(default=None, max_length=50)
+    roast_date: str | None = Field(default=None, max_length=30)
+    tasting_notes: str | None = Field(default=None, max_length=300)
+    desired_cup: str | None = Field(default=None, max_length=400)
+
+
+class AIRecipePour(BaseModel):
+    volume: int = Field(ge=0, le=100)
+    temp: int = Field(ge=80, le=96)
+    flow: float = Field(ge=3.0, le=3.5)
+    pauseAfter: int = Field(ge=0, le=60)
+    pattern: Literal["center", "circular", "spiral"]
+    agitationBefore: bool
+    agitationAfter: bool
+
+
+class AIRecipeResult(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    rationale: str = Field(min_length=1, max_length=500)
+    grind: int = Field(ge=1, le=80)
+    rpm: Literal[60, 70, 80, 90, 100, 110, 120]
+    dose: float = Field(ge=5, le=30)
+    pours: list[AIRecipePour] = Field(min_length=1, max_length=8)
+
+
+class EnhanceRecipeRequest(BaseModel):
+    bean: BeanProfile | None = None
+    recipe: dict[str, Any]
+    feedback: str = Field(min_length=3, max_length=1000)
+    rating: int | None = Field(default=None, ge=1, le=5)
+
+
+async def ask_gemini(prompt: str) -> AIRecipeResult:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "Gemini is not configured. Add GEMINI_API_KEY to .env and restart the backend.")
+    body = {
+        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.35,
+            "responseMimeType": "application/json",
+            "responseJsonSchema": AIRecipeResult.model_json_schema(),
+        },
+    }
+    try:
+        async with httpx.AsyncClient(timeout=45) as session:
+            response = None
+            models = [os.getenv("GEMINI_MODEL", "gemini-3.5-flash"), os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")]
+            for model in dict.fromkeys(models):
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                response = await session.post(url, headers={"x-goog-api-key": api_key}, json=body)
+                if response.status_code not in (429, 503):
+                    break
+        assert response is not None
+        if response.status_code >= 400:
+            detail = response.json().get("error", {}).get("message", "Gemini request failed")
+            raise HTTPException(502, detail)
+        text = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        result = AIRecipeResult.model_validate_json(text)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(502, f"Gemini returned an invalid recipe: {error}") from error
+    total = sum(p.volume for p in result.pours)
+    if total > 500:
+        raise HTTPException(502, "The AI recipe exceeded the machine's 500 ml safety limit.")
+    return result
+
+
 def status_payload():
     if not client:
         return {"connected": False, "address": device_address, "state": "offline"}
@@ -87,6 +169,43 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://127.0.0.1:5173", "http
 @app.get("/api/health")
 async def health():
     return {"ok": True, "pybloom": str(PYBLOOM_SRC), "aiConfigured": bool(os.getenv("GEMINI_API_KEY"))}
+
+
+@app.post("/api/ai/generate-recipe", response_model=AIRecipeResult)
+async def generate_ai_recipe(profile: BeanProfile):
+    prompt = f"""You are an expert specialty-coffee recipe designer for an xBloom Studio.
+Create one practical recipe from the bean profile below.
+Return only the requested JSON schema. Respect every numeric schema limit.
+The sum of pour volumes should be close to target_water and never exceed 500 ml.
+Each individual pour is limited to 100 ml, so use additional pours when needed.
+Use 1-8 pours. Temperatures are Celsius. Flow is ml/s.
+For iced coffee, describe only hot water delivered by the machine; account for ice by reducing target brew water.
+For cold style, use the lowest supported temperature and explain the compromise in rationale.
+Choose agitation conservatively. Keep the rationale concise and specific to the coffee.
+
+Bean profile:
+{profile.model_dump_json(exclude_none=True)}"""
+    return await ask_gemini(prompt)
+
+
+@app.post("/api/ai/enhance-recipe", response_model=AIRecipeResult)
+async def enhance_ai_recipe(request: EnhanceRecipeRequest):
+    prompt = f"""You are an expert specialty-coffee dial-in assistant for an xBloom Studio.
+Create an improved COPY of the recipe based on the user's taste feedback.
+Return only the requested JSON schema. Respect every numeric schema limit.
+Never exceed 500 ml total, 100 ml per pour, or 8 pours.
+Make restrained, explainable changes rather than changing everything at once.
+The new name must distinguish this version from the original.
+
+Original recipe:
+{request.recipe}
+
+Bean profile (may be absent):
+{request.bean.model_dump_json(exclude_none=True) if request.bean else "Not provided"}
+
+Rating: {request.rating or "Not provided"}/5
+Taste feedback: {request.feedback}"""
+    return await ask_gemini(prompt)
 
 
 @app.get("/api/devices")
