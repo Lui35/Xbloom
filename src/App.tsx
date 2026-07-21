@@ -188,7 +188,7 @@ const initialRecipes: Recipe[] = [
 ];
 
 type BrewSample = { time: number; water: number; coffee: number };
-type BrewRecord = { id:number; recipeName:string; completedAt:string; duration:number; water:number; coffee:number; steps:number; simulated:boolean };
+type BrewRecord = { id:number; recipeName:string; completedAt:string; duration:number; water:number; coffee:number; steps:number };
 type BrewEstimate = {
   water: number;
   step: number;
@@ -473,8 +473,7 @@ function App() {
   const [samples, setSamples] = useState<BrewSample[]>([]);
   const [brewComplete, setBrewComplete] = useState(false);
   const [brewTimingStarted, setBrewTimingStarted] = useState(false);
-  const [simulation, setSimulation] = useState(false);
-  const [history, setHistory] = useState<BrewRecord[]>(() => { try { return JSON.parse(localStorage.getItem("xbloom-history") || "[]") } catch { return [] } });
+  const [history, setHistory] = useState<BrewRecord[]>(() => { try { return JSON.parse(localStorage.getItem("xbloom-history") || "[]").filter((record:{simulated?:boolean})=>!record.simulated) } catch { return [] } });
   const brewStart = useRef(0),
     brewerWasActive = useRef(false),
     brewWeightBaseline = useRef(0),
@@ -493,11 +492,11 @@ function App() {
   useEffect(() => {
     if (!brewing || !brewTimingStarted) return;
     const timer = setInterval(
-      () => setElapsed(Math.floor(((Date.now() - brewStart.current) / 1000) * (simulation ? 4 : 1))),
+      () => setElapsed(Math.floor((Date.now() - brewStart.current) / 1000)),
       250,
     );
     return () => clearInterval(timer);
-  }, [brewing, brewTimingStarted, simulation]);
+  }, [brewing, brewTimingStarted]);
 
   useEffect(() => {
     const poll = setInterval(async () => {
@@ -521,13 +520,13 @@ function App() {
   }, [connected, telemetry.waterLevelOk]);
   const brewEstimate = estimateBrew(selected, elapsed);
   useEffect(() => {
-    if (simulation || !brewing || brewTimingStarted || !telemetry.brewerRunning) return;
+    if (!brewing || brewTimingStarted || !telemetry.brewerRunning) return;
     brewStart.current = Date.now();
     brewWeightBaseline.current = telemetry.weight || brewWeightBaseline.current;
     setElapsed(0);
     setSamples([{ time: 0, water: 0, coffee: 0 }]);
     setBrewTimingStarted(true);
-  }, [simulation, brewing, brewTimingStarted, telemetry.brewerRunning, telemetry.weight]);
+  }, [brewing, brewTimingStarted, telemetry.brewerRunning, telemetry.weight]);
   useEffect(() => {
     if (!brewing || !brewTimingStarted) return;
     setSamples((list) =>
@@ -536,28 +535,25 @@ function App() {
         {
           time: elapsed,
           water: brewEstimate.water,
-          coffee: simulation
-            ? estimateBrew(selected, Math.max(0, elapsed - 4)).water * 0.82
-            : Math.max(0, (telemetry.weight || 0) - brewWeightBaseline.current),
+          coffee: Math.max(0, (telemetry.weight || 0) - brewWeightBaseline.current),
         },
       ].slice(-900),
     );
-  }, [brewing, brewTimingStarted, simulation, selected, elapsed, brewEstimate.water, telemetry.weight]);
+  }, [brewing, brewTimingStarted, elapsed, brewEstimate.water, telemetry.weight]);
   useEffect(() => {
     if (telemetry.brewerRunning) brewerWasActive.current = true;
     if (!brewing || !brewTimingStarted) return;
-    if (simulation ? brewEstimate.complete : (
+    if (
       telemetry.state === "complete" ||
       (brewerWasActive.current && !telemetry.brewerRunning && elapsed > 10) ||
       elapsed >= brewEstimate.totalTime + 15
-    )) {
+    ) {
       setBrewing(false);
       setBrewComplete(true);
     }
   }, [
     brewing,
     brewTimingStarted,
-    simulation,
     elapsed,
     brewEstimate.totalTime,
     telemetry.brewerRunning,
@@ -567,9 +563,9 @@ function App() {
     if (!brewComplete || brewRecorded.current) return;
     brewRecorded.current = true;
     const last = samples.at(-1);
-    const record:BrewRecord = { id:Date.now(), recipeName:selected.name, completedAt:new Date().toISOString(), duration:elapsed, water:last?.water||0, coffee:last?.coffee||0, steps:selected.pours.length, simulated:simulation };
+    const record:BrewRecord = { id:Date.now(), recipeName:selected.name, completedAt:new Date().toISOString(), duration:elapsed, water:last?.water||0, coffee:last?.coffee||0, steps:selected.pours.length };
     setHistory((current) => { const next=[record,...current].slice(0,100); localStorage.setItem("xbloom-history",JSON.stringify(next)); return next });
-  }, [brewComplete, elapsed, samples, selected.name, selected.pours.length, simulation]);
+  }, [brewComplete, elapsed, samples, selected.name, selected.pours.length]);
 
   function updateRecipe(patch: Partial<Recipe>) {
     setRecipeDirty(true);
@@ -698,7 +694,6 @@ function App() {
     )
       return;
     setConnectionError("");
-    setSimulation(false);
     try {
       brewWeightBaseline.current = telemetry.weight || 0;
       await xbloomApi.brew({
@@ -735,28 +730,7 @@ function App() {
       );
     }
   }
-  function startSimulation() {
-    setConnectionError("");
-    setSimulation(true);
-    brewStart.current = Date.now();
-    brewerWasActive.current = false;
-    brewRecorded.current = false;
-    brewWeightBaseline.current = 0;
-    setElapsed(0);
-    setSamples([{ time: 0, water: 0, coffee: 0 }]);
-    setBrewComplete(false);
-    setWaterAlert(false);
-    setBrewTimingStarted(true);
-    setBrewing(true);
-    setNav("Brew");
-  }
   async function stopBrew() {
-    if (simulation) {
-      setBrewing(false);
-      setSimulation(false);
-      setNav("Home");
-      return;
-    }
     try {
       await xbloomApi.stop();
       setBrewing(false);
@@ -1250,7 +1224,7 @@ function App() {
                 <h2>History</h2>
               </div>
             </div>
-            {history.length===0?<div className="empty-card"><History/><h3>Your completed brews will appear here</h3><p>History recording will begin with your next completed brew or simulation.</p></div>:<div className="history-list">{history.map(record=><article key={record.id}><span className="history-icon"><Coffee size={20}/></span><div><strong>{record.recipeName}</strong><small>{new Date(record.completedAt).toLocaleString()} · {record.steps} steps {record.simulated?'· Simulation':''}</small></div><b>{formatTime(record.duration)}</b><span>{record.water.toFixed(0)} ml</span><span>{record.coffee.toFixed(1)} g</span></article>)}</div>}
+            {history.length===0?<div className="empty-card"><History/><h3>Your completed brews will appear here</h3><p>History recording will begin with your next completed brew.</p></div>:<div className="history-list">{history.map(record=><article key={record.id}><span className="history-icon"><Coffee size={20}/></span><div><strong>{record.recipeName}</strong><small>{new Date(record.completedAt).toLocaleString()} · {record.steps} steps</small></div><b>{formatTime(record.duration)}</b><span>{record.water.toFixed(0)} ml</span><span>{record.coffee.toFixed(1)} g</span></article>)}</div>}
           </section>
         )}
 
@@ -1259,7 +1233,7 @@ function App() {
             <div className="session-heading">
               <div>
                 <p className="eyebrow">
-                  {brewComplete ? (simulation ? "SIMULATION COMPLETE" : "BREW COMPLETE") : simulation ? "BREW SIMULATION · 4× SPEED" : "LIVE BREW"}
+                  {brewComplete ? "BREW COMPLETE" : "LIVE BREW"}
                 </p>
                 <h2>{selected.name}</h2>
                 <p>{brewComplete ? "Your cup is ready." : brewTimingStarted ? brewEstimate.phase : selected.useGrinder ? "Grinding, settling & positioning" : "Settling & positioning"}</p>
@@ -1356,8 +1330,7 @@ function App() {
                 <span>→</span>
               </button>
             )}
-            {simulation && brewing && <p className="simulation-note">Simulation only — no commands are being sent to your xBloom.</p>}
-            {!simulation && !connected && brewing && (
+            {!connected && brewing && (
               <p className="session-note">
                 Machine connection was lost. Water remains estimated from the
                 recipe timeline.
@@ -1413,13 +1386,10 @@ function App() {
                   </span>
                 </div>
               </div>
-              <div className="brew-actions-main">
-                <button className="simulate-button" onClick={startSimulation} disabled={brewing}>Simulate brew <span>▶</span></button>
-                <button className={brewing ? "primary stop" : "primary"} onClick={brewing ? stopBrew : startBrew}>
-                  {brewing ? `Stop brew · ${formatTime(elapsed)}` : connected ? "Start brew" : "Connect & brew"}
-                  <span>{brewing ? "■" : "→"}</span>
-                </button>
-              </div>
+              <button className={brewing ? "primary stop" : "primary"} onClick={brewing ? stopBrew : startBrew}>
+                {brewing ? `Stop brew · ${formatTime(elapsed)}` : connected ? "Start brew" : "Connect & brew"}
+                <span>{brewing ? "■" : "→"}</span>
+              </button>
               {connectionError && (
                 <p className="brew-error" role="alert">
                   {connectionError}
@@ -1458,7 +1428,7 @@ function App() {
               </article>
               <article className="last-brew">
                 <p className="eyebrow">LAST BREW</p>
-                {history[0]?<><div><strong>{history[0].recipeName}</strong><span>{new Date(history[0].completedAt).toLocaleString()} {history[0].simulated?'· Simulation':''}</span></div><b className="last-duration">{formatTime(history[0].duration)}</b></>:<><div><strong>No completed brews</strong><span>Run a brew or simulation to begin</span></div><b className="last-duration">—</b></>}
+                {history[0]?<><div><strong>{history[0].recipeName}</strong><span>{new Date(history[0].completedAt).toLocaleString()}</span></div><b className="last-duration">{formatTime(history[0].duration)}</b></>:<><div><strong>No completed brews</strong><span>Complete a brew to begin</span></div><b className="last-duration">—</b></>}
               </article>
             </div>
           </section>
