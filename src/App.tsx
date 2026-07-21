@@ -313,7 +313,7 @@ function PatternGlyph({
   }, [pattern, active]);
   return <canvas ref={ref} className="pattern-canvas" aria-hidden="true" />;
 }
-function BrewChart({ samples }: { samples: BrewSample[] }) {
+function BrewChart({ samples, totalTime }: { samples: BrewSample[]; totalTime:number }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const node = canvas.current;
@@ -330,21 +330,21 @@ function BrewChart({ samples }: { samples: BrewSample[] }) {
     ctx.strokeStyle = "#2d302a";
     ctx.lineWidth = 1;
     for (let i = 0; i < 4; i++) {
-      const y = 12 + (i * (h - 32)) / 3;
+      const y = 20 + (i * (h - 48)) / 3;
       ctx.beginPath();
-      ctx.moveTo(36, y);
-      ctx.lineTo(w - 8, y);
+      ctx.moveTo(52, y);
+      ctx.lineTo(w - 34, y);
       ctx.stroke();
     }
     if (samples.length < 2) return;
-    const maxTime = Math.max(60, samples.at(-1)?.time || 60);
+    const maxTime = Math.max(60, totalTime, samples.at(-1)?.time || 60);
     const maxValue = Math.max(100, ...samples.flatMap((s) => [s.water, s.coffee]));
     (["water", "coffee"] as const).forEach((metric) => {
       const color = metric === "water" ? "#68a8ff" : "#d9ff62";
       let filtered = samples[0][metric];
       const points = samples.map((s) => {
         filtered = filtered * 0.72 + s[metric] * 0.28;
-        return { x: 36 + (s.time / maxTime) * (w - 48), y: 12 + (1 - filtered / maxValue) * (h - 32) };
+        return { x: 52 + (s.time / maxTime) * (w - 86), y: 20 + (1 - filtered / maxValue) * (h - 48) };
       });
       ctx.strokeStyle = color;
       ctx.lineWidth = 3;
@@ -365,7 +365,7 @@ function BrewChart({ samples }: { samples: BrewSample[] }) {
     });
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
-  }, [samples]);
+  }, [samples, totalTime]);
   return <canvas className="brew-chart" ref={canvas} aria-label="Live chart of water poured and coffee collected" />;
 }
 const formatTime = (seconds: number) =>
@@ -1303,7 +1303,7 @@ function App() {
             </div>
             <article className="graph-card combined-graph">
               <div className="combined-legend"><span><i className="graph-dot water"/><strong>Water poured</strong></span><span><i className="graph-dot coffee"/><strong>Coffee collected</strong></span><small>Live · {formatTime(elapsed)}</small></div>
-              <BrewChart samples={samples}/>
+              <BrewChart samples={samples} totalTime={brewEstimate.totalTime}/>
             </article>
             <article className="step-card">
               <div className="step-card-heading">
@@ -1327,7 +1327,7 @@ function App() {
                         ? "current"
                         : "upcoming";
                   return (
-                    <article className={`live-pour ${state}`} key={i} style={{height:`${Math.max(210,170+p.volume*1.7)}px`}}>
+                    <article className={`live-pour ${state}`} key={i} style={{height:`${Math.max(185,150+p.volume*1.35)}px`}}>
                       <header><b>{state==='done'?'✓':i+1}</b><strong>{p.volume}<small>ml</small></strong></header>
                       <div className="summary-pattern"><PatternGlyph pattern={p.pattern} active={state==='current'}/><strong>{p.temp}°C</strong></div>
                       <span className="summary-step-name">{i===0?'Bloom':`Pour ${i+1}`}</span>
