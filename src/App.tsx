@@ -44,8 +44,11 @@ type Recipe = {
   unit: "g" | "ml";
   useGrinder: boolean;
   bean?: AIBeanProfile;
+  beanId?: number;
   pours: Pour[];
 };
+type Bean = AIBeanProfile & { id:number; name:string; roaster?:string };
+const blankBean=():Bean=>({id:Date.now(),name:"",roaster:"",brew_style:"hot",brewer:"xBloom Omni",dose:18,target_water:288,country:"",region:"",producer:"",species:"Arabica",variety:"",process:"Washed",roast_level:"Medium-light",tasting_notes:"",desired_cup:""});
 const initialRecipes: Recipe[] = [
   {
     id: 1,
@@ -472,7 +475,10 @@ function App() {
   const [aiResult,setAiResult]=useState<AIRecipeResult|null>(null);
   const [aiFeedback,setAiFeedback]=useState("");
   const [aiRating,setAiRating]=useState(4);
-  const [aiBean,setAiBean]=useState<AIBeanProfile>({brew_style:"hot",brewer:"xBloom Omni",dose:18,target_water:288,country:"",region:"",producer:"",species:"Arabica",variety:"",process:"Washed",roast_level:"Medium-light",tasting_notes:"",desired_cup:""});
+  const [beans,setBeans]=useState<Bean[]>(()=>{try{return JSON.parse(localStorage.getItem("xbloom-beans")||"[]")}catch{return[]}});
+  const [aiBean,setAiBean]=useState<Bean>(blankBean);
+  const [selectedBeanId,setSelectedBeanId]=useState<number|null>(null);
+  const [creatingBean,setCreatingBean]=useState(false);
   const [selectedId, setSelectedId] = useState(1);
   const selected = recipes.find((r) => r.id === selectedId) || recipes[0];
   const [machineName, setMachineName] = useState(
@@ -494,6 +500,7 @@ function App() {
     () => [
       { name: "Home", icon: LayoutDashboard },
       { name: "Recipes", icon: Library },
+      { name: "Beans", icon: Coffee },
       { name: "History", icon: History },
       { name: "Settings", icon: Settings },
     ],
@@ -589,15 +596,18 @@ function App() {
     savedRecipes.current = structuredClone(recipes);
     setRecipeDirty(false);
   }
-  function openAI(mode:"create"|"enhance") { setAiMode(mode);setAiResult(null);setAiError("");setAiFeedback("");if(mode==="enhance"&&selected.bean)setAiBean(selected.bean) }
+  function saveBeans(next:Bean[]){setBeans(next);localStorage.setItem("xbloom-beans",JSON.stringify(next))}
+  function selectBeanForAI(id:number){const bean=beans.find(b=>b.id===id);setSelectedBeanId(id);if(bean)setAiBean({...bean})}
+  function saveCurrentBean(){const bean={...aiBean,id:aiBean.id||Date.now(),name:aiBean.name.trim()||`${aiBean.country||"My"} coffee`};const next=beans.some(b=>b.id===bean.id)?beans.map(b=>b.id===bean.id?bean:b):[...beans,bean];saveBeans(next);setAiBean(bean);setSelectedBeanId(bean.id);setCreatingBean(false)}
+  function openAI(mode:"create"|"enhance",bean?:Bean) { setAiMode(mode);setAiResult(null);setAiError("");setAiFeedback("");const linked=bean||beans.find(b=>b.id===selected.beanId)||beans.find(b=>JSON.stringify(b)===JSON.stringify(selected.bean));if(linked){setAiBean({...linked});setSelectedBeanId(linked.id)}else if(mode==="enhance"&&selected.bean){setAiBean({...blankBean(),...selected.bean});setSelectedBeanId(null)}else if(beans.length){setAiBean({...beans[0]});setSelectedBeanId(beans[0].id)}else{setAiBean(blankBean());setSelectedBeanId(null);setCreatingBean(true)} }
   async function runAI() {
     setAiLoading(true);setAiElapsed(0);setAiError("");setAiResult(null);
-    try { setAiResult(aiMode==="enhance"?await xbloomApi.enhanceRecipe({bean:selected.bean,recipe:selected,feedback:aiFeedback,rating:aiRating}):await xbloomApi.generateRecipe(aiBean)) }
+    try { setAiResult(aiMode==="enhance"?await xbloomApi.enhanceRecipe({bean:aiBean,recipe:selected,feedback:aiFeedback,rating:aiRating}):await xbloomApi.generateRecipe(aiBean)) }
     catch(error){setAiError(error instanceof Error?error.message:"AI recipe generation failed.")}
     finally{setAiLoading(false)}
   }
   useEffect(()=>{if(!aiLoading)return;const started=Date.now();const timer=window.setInterval(()=>setAiElapsed(Math.floor((Date.now()-started)/1000)),1000);return()=>window.clearInterval(timer)},[aiLoading])
-  function saveAIRecipe(){if(!aiResult)return;const total=aiResult.pours.reduce((sum,p)=>sum+p.volume,0);const id=Date.now();const sourceBean=aiMode==="enhance"?(selected.bean||aiBean):aiBean;const recipe:Recipe={id,name:aiResult.name,roaster:aiMode==="enhance"?selected.roaster:"AI generated",origin:[sourceBean.country,sourceBean.region].filter(Boolean).join(" · ")||"AI coffee profile",temp:aiResult.pours[0].temp,ratio:`1:${(total/aiResult.dose).toFixed(1)}`,duration:formatTime(Math.round(aiResult.pours.reduce((sum,p)=>sum+p.volume/p.flow+p.pauseAfter,0))),color:aiMode==="enhance"?selected.color:"#8aa76b",grind:aiResult.grind,rpm:aiResult.rpm,dose:aiResult.dose,unit:"ml",useGrinder:true,bean:sourceBean,pours:aiResult.pours.map((p,i)=>({...p,pauseBefore:i===0?5:0}))};const next=[...recipes,recipe];setRecipes(next);setSelectedId(id);setRecipeDirty(true);setAiMode(null);setAiResult(null)}
+  function saveAIRecipe(){if(!aiResult)return;const total=aiResult.pours.reduce((sum,p)=>sum+p.volume,0);const id=Date.now();const sourceBean=aiBean;const recipe:Recipe={id,name:`${sourceBean.name||"Coffee"} — ${aiResult.name}`,roaster:sourceBean.roaster||"AI generated",origin:[sourceBean.country,sourceBean.region].filter(Boolean).join(" · ")||"AI coffee profile",temp:aiResult.pours[0].temp,ratio:`1:${(total/aiResult.dose).toFixed(1)}`,duration:formatTime(Math.round(aiResult.pours.reduce((sum,p)=>sum+p.volume/p.flow+p.pauseAfter,0))),color:aiMode==="enhance"?selected.color:"#8aa76b",grind:aiResult.grind,rpm:aiResult.rpm,dose:aiResult.dose,unit:"ml",useGrinder:true,bean:sourceBean,beanId:selectedBeanId||undefined,pours:aiResult.pours.map((p,i)=>({...p,pauseBefore:i===0?5:0}))};const next=[...recipes,recipe];setRecipes(next);setSelectedId(id);setRecipeDirty(true);setAiMode(null);setAiResult(null)}
   function selectRecipe(id: number) {
     if (id === selected.id) return;
     if (recipeDirty && !window.confirm("Discard your unsaved recipe changes?")) return;
@@ -847,7 +857,9 @@ function App() {
         )}
 
         {aiMode&&<div className="ai-modal-backdrop" role="presentation"><section className="ai-modal" role="dialog" aria-modal="true" aria-labelledby="ai-title"><header><div><p className="eyebrow">AI RECIPE LAB</p><h2 id="ai-title">{aiMode==="create"?"Create a recipe":"Enhance your recipe"}</h2><p>{aiMode==="create"?"Tell Gemini about your coffee and the cup you want.":`Improve “${selected.name}” from your tasting experience.`}</p></div><button onClick={()=>setAiMode(null)} aria-label="Close"><X/></button></header>
+          <div className="ai-bean-picker"><label>Bean<select value={selectedBeanId||"new"} onChange={e=>{if(e.target.value==="new"){setAiBean(blankBean());setSelectedBeanId(null);setCreatingBean(true)}else{selectBeanForAI(+e.target.value);setCreatingBean(false)}}}>{beans.map(bean=><option value={bean.id} key={bean.id}>{bean.name}</option>)}<option value="new">＋ Add a new bean</option></select></label>{selectedBeanId&&!creatingBean&&<span><Coffee size={18}/><b>{aiBean.name}</b><small>{[aiBean.country,aiBean.process,aiBean.variety].filter(Boolean).join(" · ")}</small></span>}</div>
           {!aiResult&&aiMode==="create"&&<div className="ai-form">
+            {(creatingBean||!selectedBeanId)&&<><label>Bean name<input autoFocus placeholder="e.g. El Paraíso Lychee" value={aiBean.name} onChange={e=>setAiBean({...aiBean,name:e.target.value})}/></label><label>Roaster<input placeholder="e.g. Manhattan Coffee Roasters" value={aiBean.roaster||""} onChange={e=>setAiBean({...aiBean,roaster:e.target.value})}/></label></>}
             <label>Brew style<select value={aiBean.brew_style} onChange={e=>setAiBean({...aiBean,brew_style:e.target.value as AIBeanProfile['brew_style']})}><option value="hot">Hot</option><option value="iced">Iced pour-over</option><option value="cold">Cold</option></select></label>
             <label>Brewer<select value={aiBean.brewer} onChange={e=>setAiBean({...aiBean,brewer:e.target.value})}>{["xBloom Omni","V60","Kalita Wave","Origami","Orea","April","Chemex","Other"].map(v=><option key={v}>{v}</option>)}</select></label>
             <label>Dose (g)<input type="number" min="5" max="30" value={aiBean.dose} onChange={e=>setAiBean({...aiBean,dose:+e.target.value})}/></label><label>Target water (ml)<input type="number" min="30" max="500" value={aiBean.target_water} onChange={e=>setAiBean({...aiBean,target_water:+e.target.value})}/></label>
@@ -856,6 +868,7 @@ function App() {
             <label>Variety<input placeholder="e.g. Pink Bourbon" value={aiBean.variety||""} onChange={e=>setAiBean({...aiBean,variety:e.target.value})}/></label><label>Process<select value={aiBean.process||""} onChange={e=>setAiBean({...aiBean,process:e.target.value})}>{["Washed","Natural","Honey","Anaerobic","Carbonic maceration","Wet-hulled","Co-fermented","Infused","Decaffeinated","Experimental / other"].map(v=><option key={v}>{v}</option>)}</select></label>
             <label>Altitude (masl)<input type="number" min="0" max="3000" placeholder="Optional" value={aiBean.altitude_masl||""} onChange={e=>setAiBean({...aiBean,altitude_masl:e.target.value?+e.target.value:undefined})}/></label><label>Roast level<select value={aiBean.roast_level||""} onChange={e=>setAiBean({...aiBean,roast_level:e.target.value})}><option value="">Optional</option><option>Light</option><option>Medium-light</option><option>Medium</option><option>Medium-dark</option><option>Dark</option></select></label>
             <label className="wide">Tasting notes<input placeholder="e.g. strawberry, cacao, floral" value={aiBean.tasting_notes||""} onChange={e=>setAiBean({...aiBean,tasting_notes:e.target.value})}/></label><label className="wide">Cup goal<textarea placeholder="More sweetness, high clarity, tea-like body…" value={aiBean.desired_cup||""} onChange={e=>setAiBean({...aiBean,desired_cup:e.target.value})}/></label>
+            {(creatingBean||!selectedBeanId)&&<button type="button" className="save-bean-inline wide" onClick={saveCurrentBean} disabled={!aiBean.name.trim()}><Save size={16}/> Save bean to My Beans</button>}
           </div>}
           {!aiResult&&aiMode==="enhance"&&<div className="ai-feedback"><label>How did it taste?<textarea autoFocus placeholder="It was slightly sour and thin. I want more sweetness and body…" value={aiFeedback} onChange={e=>setAiFeedback(e.target.value)}/></label><label>Overall rating<select value={aiRating} onChange={e=>setAiRating(+e.target.value)}>{[1,2,3,4,5].map(v=><option value={v} key={v}>{v} / 5</option>)}</select></label><div className="feedback-chips">{["Too sour","Too bitter","Too weak","Too strong","More sweetness","More clarity","More body","Too dry"].map(text=><button key={text} onClick={()=>setAiFeedback(value=>`${value}${value?' ':''}${text}.`)}>{text}</button>)}</div></div>}
           {aiLoading&&<div className="ai-generating" role="status" aria-live="polite"><LoaderCircle/><div><strong>Designing your recipe</strong><span>Gemini is balancing the grind, temperature, and pours.</span><small>{aiElapsed}s elapsed · usually ready within 20–40 seconds</small></div></div>}
@@ -1206,6 +1219,11 @@ function App() {
                 </div>
               </aside>
             </div>
+          </section>
+        )}
+        {nav === "Beans" && (
+          <section className="editor-page beans-page"><div className="page-heading"><div><p className="eyebrow">MY COFFEE</p><h2>Beans</h2><p>Save a coffee once, then reuse its details in every AI recipe.</p></div><button className="add-button" onClick={()=>{setAiBean(blankBean());setSelectedBeanId(null);setCreatingBean(true);setAiMode("create")}}><Plus size={17}/> Add bean</button></div>
+            {beans.length?<div className="bean-library">{beans.map(bean=><article key={bean.id}><div className="bean-card-mark"><Coffee/></div><div><small>{bean.roaster||"YOUR COFFEE"}</small><h3>{bean.name}</h3><p>{[bean.country,bean.region,bean.variety].filter(Boolean).join(" · ")||"Origin details not added"}</p><div className="bean-tags">{[bean.process,bean.roast_level,bean.altitude_masl?`${bean.altitude_masl} masl`:""].filter(Boolean).map(value=><span key={String(value)}>{value}</span>)}</div>{bean.tasting_notes&&<blockquote>{bean.tasting_notes}</blockquote>}</div><footer><button className="ai-button" onClick={()=>openAI("create",bean)}><Sparkles size={16}/> Create recipe with AI</button><span className="bean-card-actions"><button className="ai-secondary" onClick={()=>{openAI("create",bean);setCreatingBean(true)}}>Edit</button><button className="bean-delete" aria-label={`Remove ${bean.name}`} onClick={()=>{if(window.confirm(`Remove “${bean.name}” from My Beans?`))saveBeans(beans.filter(b=>b.id!==bean.id))}}><Trash2 size={16}/></button></span></footer></article>)}</div>:<div className="empty-beans"><Coffee size={42}/><h3>Your bean shelf is empty</h3><p>Add your first coffee and Gemini can reuse its origin, process, variety, and tasting notes.</p><button className="ai-button" onClick={()=>{setAiBean(blankBean());setSelectedBeanId(null);setCreatingBean(true);setAiMode("create")}}><Plus size={17}/> Add your first bean</button></div>}
           </section>
         )}
         {nav === "Settings" && (
