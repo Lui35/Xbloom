@@ -103,7 +103,9 @@ def normalize_ai_recipe(raw: str) -> dict[str, Any]:
     data = json.loads(raw)
     rpms = (60, 70, 80, 90, 100, 110, 120)
     data["rpm"] = min(rpms, key=lambda value: abs(value - float(data.get("rpm", 80))))
-    data["grind"] = max(1, min(80, round(float(data.get("grind", 50)))))
+    # xBloom's pour-over range begins at 31; lower values are intended for
+    # espresso/AeroPress and are not appropriate for recipes made here.
+    data["grind"] = max(31, min(55, round(float(data.get("grind", 45)))))
     data["dose"] = max(5, min(30, float(data.get("dose", 18))))
     data["name"] = str(data.get("name") or "AI coffee recipe")[:80]
     data["rationale"] = str(data.get("rationale") or "Balanced for the selected coffee.")[:500]
@@ -217,9 +219,16 @@ async def generate_ai_recipe(profile: BeanProfile):
     prompt = f"""You are an expert specialty-coffee recipe designer for an xBloom Studio.
 Create one practical recipe from the bean profile below.
 Return only the requested JSON schema. Respect every numeric schema limit.
+This is a pour-over recipe. Grind uses the xBloom scale: espresso is near 1,
+AeroPress near 16, pour-over is 31-55, and French press/cold brew begins near 56.
+You MUST choose a grind from 31 through 55. Use finer values within that range
+for more extraction and coarser values for less extraction.
 The sum of pour volumes should be close to target_water and never exceed 500 ml.
 Each individual pour is limited to 100 ml, so use additional pours when needed.
-Use 1-8 pours. Temperatures are Celsius. Flow is ml/s.
+Use 3, 4, or 5 pours. Choose the count deliberately from the bean, process,
+roast, dose, target water, and desired cup; do not default to three pours.
+Three favors a simpler/faster profile, four a balanced profile, and five finer
+control or higher extraction. Temperatures are Celsius. Flow is ml/s.
 For iced coffee, describe only hot water delivered by the machine; account for ice by reducing target brew water.
 For cold style, use the lowest supported temperature and explain the compromise in rationale.
 Choose agitation conservatively. Keep the rationale concise and specific to the coffee.
@@ -235,6 +244,9 @@ async def enhance_ai_recipe(request: EnhanceRecipeRequest):
 Create an improved COPY of the recipe based on the user's taste feedback.
 Return only the requested JSON schema. Respect every numeric schema limit.
 Never exceed 500 ml total, 100 ml per pour, or 8 pours.
+This is pour-over: the xBloom grind MUST remain from 31 through 55.
+Choose 3, 4, or 5 pours deliberately. You may change the pour count when the
+taste feedback supports it; do not automatically return three pours.
 Make restrained, explainable changes rather than changing everything at once.
 The new name must distinguish this version from the original.
 
