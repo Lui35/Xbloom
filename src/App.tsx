@@ -1152,18 +1152,8 @@ function App() {
                         height: `${Math.max(210, 170 + p.volume * 1.7)}px`,
                       }}
                     >
-                      <div
-                        className={`agitation-marker before ${p.agitationBefore ? "on" : ""}`}
-                        title="Agitation before"
-                      >
-                        <Waves size={13} />
-                      </div>
-                      <div
-                        className={`agitation-marker after ${p.agitationAfter ? "on" : ""}`}
-                        title="Agitation after"
-                      >
-                        <Waves size={13} />
-                      </div>
+                      {p.agitationBefore && <div className="agitation-marker before on" title="Agitation before"><Waves size={13} /></div>}
+                      {p.agitationAfter && <div className="agitation-marker after on" title="Agitation after"><Waves size={13} /></div>}
                       <header>
                         <b>{i + 1}</b>
                         <strong>
@@ -1175,23 +1165,13 @@ function App() {
                         <PatternGlyph pattern={p.pattern} active={true} />
                       </div>
                       <div className="summary-facts">
-                        <span><small>Temp</small>{p.temp}°C</span>
-                        <span><small>Flow</small>{p.flow.toFixed(1)} ml/s</span>
-                        <span><small>Pour</small>~{Math.round(p.volume / p.flow)}s</span>
-                        <span><small>Before</small>{p.pauseBefore}s</span>
-                        <span><small>After</small>{p.pauseAfter}s</span>
-                        <span><small>Total</small>{selected.pours.slice(0, i + 1).reduce((sum, step) => sum + step.volume, 0)} {selected.unit}</span>
+                        <span>{p.temp}°C</span>
+                        <span>{p.flow.toFixed(1)}<small>ml/s</small></span>
                       </div>
+                      {p.pauseBefore>0&&<span className="pause-corner before">{p.pauseBefore}s</span>}
+                      {p.pauseAfter>0&&<span className="pause-corner after">{p.pauseAfter}s</span>}
                     </article>
                   ))}
-                </div>
-                <div className="summary-legend">
-                  <span>
-                    <i className="before" /> Before agitation
-                  </span>
-                  <span>
-                    <i className="after" /> After agitation
-                  </span>
                 </div>
               </aside>
             </div>
