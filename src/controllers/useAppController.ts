@@ -24,6 +24,7 @@ export function useAppController() {
           useGrinder: r.useGrinder !== false,
           brewStyle: r.brewStyle || "hot",
           iceGrams: r.iceGrams || 0,
+          generatedByAI: r.generatedByAI ?? Boolean(r.beanId && r.bean),
           pours: r.pours.map((p: Pour, i: number) => ({
             volume: p.volume,
             temp: p.temp || r.temp,
@@ -65,6 +66,7 @@ export function useAppController() {
   const [beanPhotoLoading, setBeanPhotoLoading] = useState(false);
   const [beanPhotoError, setBeanPhotoError] = useState("");
   const [libraryMessage, setLibraryMessage] = useState("");
+  const [recipeTransferMessage, setRecipeTransferMessage] = useState("");
   const [selectedId, setSelectedId] = useState(1);
   const selected = recipes.find((r) => r.id === selectedId) || recipes[0];
   const [machineName, setMachineName] = useState(
@@ -441,6 +443,7 @@ export function useAppController() {
       iceGrams: aiResult.ice_grams,
       bean: sourceBean,
       beanId: selectedBeanId || undefined,
+      generatedByAI: true,
       pours: aiResult.pours.map((p, i) => ({ ...p, pauseBefore: i === 0 ? 5 : 0 })),
     };
     const next = [...recipes, recipe];
@@ -451,6 +454,68 @@ export function useAppController() {
     setRecipeDirty(false);
     setAiMode(null);
     setAiResult(null);
+  }
+  function exportSelectedRecipe() {
+    const payload = {
+      format: "xbloom-recipe",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      recipe: selected,
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${
+      selected.name
+        .replace(/[^a-z0-9]+/gi, "-")
+        .replace(/^-|-$/g, "")
+        .toLowerCase() || "xbloom-recipe"
+    }.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setRecipeTransferMessage(`Exported “${selected.name}”.`);
+  }
+  async function importRecipe(file: File) {
+    setRecipeTransferMessage("");
+    try {
+      const data = JSON.parse(await file.text()) as Record<string, unknown>;
+      const candidate = data.recipe && typeof data.recipe === "object" ? data.recipe : data;
+      const raw = candidate as Partial<Recipe>;
+      if (!raw || typeof raw.name !== "string" || !Array.isArray(raw.pours) || !raw.pours.length)
+        throw new Error("This file does not contain a valid xBloom recipe.");
+      const id = Date.now();
+      const recipe: Recipe = {
+        ...initialRecipes[0],
+        ...raw,
+        id,
+        name: raw.name.slice(0, 100),
+        pours: raw.pours.slice(0, 8).map((pour, index) => ({
+          volume: Math.max(0, Math.min(240, Number(pour.volume) || 0)),
+          temp: Math.max(80, Math.min(96, Number(pour.temp) || 93)),
+          flow: Math.max(3, Math.min(3.5, Number(pour.flow) || 3.2)),
+          pauseBefore: index === 0 ? 5 : 0,
+          pauseAfter: Math.max(0, Math.min(60, Number(pour.pauseAfter) || 0)),
+          pattern: ["center", "circular", "spiral"].includes(pour.pattern)
+            ? pour.pattern
+            : "spiral",
+          agitationBefore: Boolean(pour.agitationBefore),
+          agitationAfter: Boolean(pour.agitationAfter),
+        })),
+      };
+      const next = [...savedRecipes.current, recipe];
+      setRecipes(next);
+      savedRecipes.current = structuredClone(next);
+      localStorage.setItem("xbloom-recipes", JSON.stringify(next));
+      setSelectedId(id);
+      setRecipeDirty(false);
+      setRecipeTransferMessage(`Imported “${recipe.name}”.`);
+    } catch (error) {
+      setRecipeTransferMessage(
+        error instanceof Error ? error.message : "The recipe could not be imported.",
+      );
+    }
   }
   function selectRecipe(id: number) {
     if (id === selected.id) return;
@@ -647,6 +712,7 @@ export function useAppController() {
     beanPhotoLoading,
     beanPhotoError,
     libraryMessage,
+    recipeTransferMessage,
     setBeanEditor,
     selectedId,
     setSelectedId,
@@ -673,6 +739,8 @@ export function useAppController() {
     importBeanPhoto,
     exportLibrary,
     importLibrary,
+    exportSelectedRecipe,
+    importRecipe,
     openAI,
     runAI,
     saveAIRecipe,

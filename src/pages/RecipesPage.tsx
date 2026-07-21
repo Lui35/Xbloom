@@ -1,4 +1,15 @@
-import { Droplets, Plus, Save, Snowflake, Sparkles, Sun, Trash2, Waves } from "lucide-react";
+import {
+  Download,
+  Droplets,
+  Plus,
+  Save,
+  Snowflake,
+  Sparkles,
+  Sun,
+  Trash2,
+  Upload,
+  Waves,
+} from "lucide-react";
 import type { CSSProperties } from "react";
 import type { AppController } from "../controllers/useAppController";
 import type { Recipe } from "../domain/models";
@@ -19,6 +30,9 @@ export function RecipesPage({ controller }: { controller: AppController }) {
     removePour,
     updatePour,
     addPour,
+    exportSelectedRecipe,
+    importRecipe,
+    recipeTransferMessage,
   } = controller;
   return (
     <section className="editor-page">
@@ -28,6 +42,21 @@ export function RecipesPage({ controller }: { controller: AppController }) {
           <h2>Edit your brew</h2>
         </div>
         <div className="recipe-actions">
+          <label className="recipe-transfer-button">
+            <Upload size={16} /> Import recipe
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importRecipe(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <button className="recipe-transfer-button" onClick={exportSelectedRecipe}>
+            <Download size={16} /> Export recipe
+          </button>
           <button className="ai-button" onClick={() => openAI("create")}>
             <Sparkles size={17} /> Create with AI
           </button>
@@ -42,6 +71,7 @@ export function RecipesPage({ controller }: { controller: AppController }) {
           </button>
         </div>
       </div>
+      {recipeTransferMessage && <p className="recipe-transfer-message">{recipeTransferMessage}</p>}
       <div className="editor-layout">
         <div className="recipe-list">
           {recipes.map((r) => (
@@ -61,7 +91,14 @@ export function RecipesPage({ controller }: { controller: AppController }) {
                 )}
               </span>
               <span className="recipe-pick-copy">
-                <strong>{r.name}</strong>
+                <span className="recipe-pick-title">
+                  <strong title={r.name}>{r.name}</strong>
+                  {r.generatedByAI && (
+                    <i className="ai-origin" title="Created with AI" aria-label="Created with AI">
+                      <Sparkles /> AI
+                    </i>
+                  )}
+                </span>
                 <small>{r.origin || "Custom recipe"}</small>
                 <span className="recipe-pick-meta">
                   <i>{r.pours.length} pours</i>

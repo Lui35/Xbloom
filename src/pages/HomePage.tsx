@@ -1,4 +1,14 @@
-import { Coffee, Plus, Thermometer, Waves, Weight } from "lucide-react";
+import {
+  Coffee,
+  Droplets,
+  Plus,
+  Snowflake,
+  Sparkles,
+  Sun,
+  Thermometer,
+  Waves,
+  Weight,
+} from "lucide-react";
 import type { AppController } from "../controllers/useAppController";
 import { formatTime } from "../domain/brewing";
 
@@ -158,19 +168,32 @@ export function HomePage({ controller }: { controller: AppController }) {
               className={`recipe ${selected.id === r.id ? "selected" : ""}`}
               onClick={() => selectRecipe(r.id)}
             >
-              <span className="bean" style={{ background: r.color }} />
-              <span>
-                <strong>{r.name}</strong>
-                <small>
-                  {r.origin} ·{" "}
-                  {r.brewStyle === "iced"
-                    ? `Iced · ${r.iceGrams}g ice`
-                    : r.brewStyle === "cold"
-                      ? "Cold"
-                      : "Hot"}
-                </small>
+              <span className="home-recipe-icon" style={{ color: r.color }}>
+                {r.brewStyle === "iced" ? (
+                  <Snowflake />
+                ) : r.brewStyle === "cold" ? (
+                  <Droplets />
+                ) : (
+                  <Sun />
+                )}
               </span>
-              <b>Grind {r.grind}</b>
+              <span className="home-recipe-copy">
+                <span className="home-recipe-title">
+                  <strong title={r.name}>{r.name}</strong>
+                  {r.generatedByAI && (
+                    <i className="ai-origin">
+                      <Sparkles /> AI
+                    </i>
+                  )}
+                </span>
+                <small>{r.origin || "Custom recipe"}</small>
+                <span className="home-recipe-meta">
+                  <i>{r.pours.length} pours</i>
+                  <i>{r.ratio}</i>
+                  <i>Grind {r.grind}</i>
+                  <i>{r.brewStyle === "iced" ? "Iced" : r.brewStyle === "cold" ? "Cold" : "Hot"}</i>
+                </span>
+              </span>
             </button>
           ))}
         </div>

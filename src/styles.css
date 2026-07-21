@@ -2997,6 +2997,116 @@ main {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.recipe-list .recipe-pick.selected {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--recipe-accent) 10%, #151713),
+    #10120f 66%
+  );
+}
+.recipe-pick-title,
+.home-recipe-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+.recipe-list .recipe-pick-title strong,
+.home-recipe-title strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-origin {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 6px;
+  border: 1px solid #71833c;
+  border-radius: 12px;
+  background: #202719;
+  color: #d8ee7d;
+  font-size: 8px;
+  font-style: normal;
+  line-height: 1;
+}
+.ai-origin svg {
+  width: 9px;
+  height: 9px;
+}
+.recipe-transfer-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid #41463b;
+  border-radius: 9px;
+  background: #171a15;
+  color: #d7dbd2;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.recipe-transfer-button input {
+  display: none;
+}
+.recipe-transfer-message {
+  margin: -8px 0 14px;
+  padding: 9px 12px;
+  border: 1px solid #41463b;
+  border-radius: 8px;
+  background: #171a15;
+  color: #bcc2b7;
+  font-size: 10px;
+}
+.recipe {
+  grid-template-columns: 46px minmax(0, 1fr);
+  min-height: 112px;
+}
+.recipe.selected {
+  background: #141613;
+}
+.home-recipe-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid currentColor;
+  border-radius: 14px;
+  background: #191c17;
+}
+.home-recipe-icon svg {
+  width: 20px;
+}
+.home-recipe-copy {
+  min-width: 0;
+}
+.home-recipe-copy > small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.home-recipe-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 11px;
+}
+.home-recipe-meta i {
+  padding: 4px 7px;
+  border: 1px solid #393d34;
+  border-radius: 20px;
+  color: #aeb2a8;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1;
+}
 .pour-bars article {
   isolation: isolate;
 }

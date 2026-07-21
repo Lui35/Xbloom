@@ -32,6 +32,7 @@ export type Recipe = {
   iceGrams: number;
   bean?: AIBeanProfile;
   beanId?: number;
+  generatedByAI?: boolean;
   pours: Pour[];
 };
 
