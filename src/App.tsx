@@ -62,7 +62,7 @@ const initialRecipes: Recipe[] = [
         volume: 50,
         temp: 93,
         flow: 3,
-        pauseBefore: 0,
+        pauseBefore: 5,
         pauseAfter: 30,
         pattern: "spiral",
         agitationBefore: false,
@@ -109,7 +109,7 @@ const initialRecipes: Recipe[] = [
         volume: 55,
         temp: 92,
         flow: 3,
-        pauseBefore: 0,
+        pauseBefore: 5,
         pauseAfter: 35,
         pattern: "circular",
         agitationBefore: false,
@@ -156,7 +156,7 @@ const initialRecipes: Recipe[] = [
         volume: 50,
         temp: 90,
         flow: 3,
-        pauseBefore: 0,
+        pauseBefore: 5,
         pauseAfter: 30,
         pattern: "center",
         agitationBefore: true,
@@ -195,34 +195,14 @@ type BrewEstimate = {
   totalTime: number;
 };
 function estimateBrew(recipe: Recipe, elapsed: number): BrewEstimate {
-  const preparation = recipe.useGrinder ? 35 : 8;
-  const totalTime =
-    preparation +
-    recipe.pours.reduce(
-      (sum, p) => sum + p.pauseBefore + p.volume / p.flow + p.pauseAfter,
-      0,
-    );
-  let cursor = elapsed - preparation,
+  const totalTime = recipe.pours.reduce(
+    (sum, p) => sum + p.volume / p.flow + p.pauseAfter,
+    0,
+  );
+  let cursor = elapsed,
     water = 0;
-  if (cursor < 0)
-    return {
-      water: 0,
-      step: 0,
-      phase: "Preparing & grinding",
-      complete: false,
-      totalTime,
-    };
   for (let i = 0; i < recipe.pours.length; i++) {
     const pour = recipe.pours[i];
-    if (cursor < pour.pauseBefore)
-      return {
-        water,
-        step: i,
-        phase: "Pause before pour",
-        complete: false,
-        totalTime,
-      };
-    cursor -= pour.pauseBefore;
     const pourTime = pour.volume / pour.flow;
     if (cursor < pourTime)
       return {
@@ -481,11 +461,11 @@ function App() {
           ...r,
           unit: r.unit || "ml",
           useGrinder: r.useGrinder !== false,
-          pours: r.pours.map((p: Pour) => ({
+          pours: r.pours.map((p: Pour, i: number) => ({
             volume: p.volume,
             temp: p.temp || r.temp,
             flow: p.flow || 3.5,
-            pauseBefore: p.pauseBefore || 0,
+            pauseBefore: i === 0 ? 5 : 0,
             pauseAfter: p.pauseAfter || 0,
             pattern: p.pattern || "spiral",
             agitationBefore: p.agitationBefore || false,
@@ -507,6 +487,7 @@ function App() {
   const [elapsed, setElapsed] = useState(0);
   const [samples, setSamples] = useState<BrewSample[]>([]);
   const [brewComplete, setBrewComplete] = useState(false);
+  const [brewTimingStarted, setBrewTimingStarted] = useState(false);
   const brewStart = useRef(0),
     brewerWasActive = useRef(false),
     brewWeightBaseline = useRef(0);
@@ -522,13 +503,13 @@ function App() {
   );
 
   useEffect(() => {
-    if (!brewing) return;
+    if (!brewing || !brewTimingStarted) return;
     const timer = setInterval(
       () => setElapsed(Math.floor((Date.now() - brewStart.current) / 1000)),
       250,
     );
     return () => clearInterval(timer);
-  }, [brewing]);
+  }, [brewing, brewTimingStarted]);
 
   useEffect(() => {
     const poll = setInterval(async () => {
@@ -556,7 +537,15 @@ function App() {
   }, [connected, telemetry.waterLevelOk]);
   const brewEstimate = estimateBrew(selected, elapsed);
   useEffect(() => {
-    if (!brewing) return;
+    if (!brewing || brewTimingStarted || !telemetry.brewerRunning) return;
+    brewStart.current = Date.now();
+    brewWeightBaseline.current = telemetry.weight || brewWeightBaseline.current;
+    setElapsed(0);
+    setSamples([{ time: 0, water: 0, coffee: 0 }]);
+    setBrewTimingStarted(true);
+  }, [brewing, brewTimingStarted, telemetry.brewerRunning, telemetry.weight]);
+  useEffect(() => {
+    if (!brewing || !brewTimingStarted) return;
     setSamples((list) =>
       [
         ...list,
@@ -570,10 +559,10 @@ function App() {
         },
       ].slice(-900),
     );
-  }, [brewing, elapsed, brewEstimate.water, telemetry.weight]);
+  }, [brewing, brewTimingStarted, elapsed, brewEstimate.water, telemetry.weight]);
   useEffect(() => {
     if (telemetry.brewerRunning) brewerWasActive.current = true;
-    if (!brewing) return;
+    if (!brewing || !brewTimingStarted) return;
     if (
       telemetry.state === "complete" ||
       (brewerWasActive.current && !telemetry.brewerRunning && elapsed > 10) ||
@@ -584,6 +573,7 @@ function App() {
     }
   }, [
     brewing,
+    brewTimingStarted,
     elapsed,
     brewEstimate.totalTime,
     telemetry.brewerRunning,
@@ -717,11 +707,11 @@ function App() {
           agitation_after: p.agitationAfter,
         })),
       });
-      brewStart.current = Date.now();
       brewerWasActive.current = false;
       setProgress(0);
       setElapsed(0);
       setSamples([{ time: 0, water: 0, coffee: 0 }]);
+      setBrewTimingStarted(false);
       setBrewComplete(false);
       setWaterAlert(false);
       setBrewing(true);
@@ -1038,18 +1028,6 @@ function App() {
                         </select>
                       </label>
                       <label>
-                        Pause before (sec)
-                        <input
-                          type="number"
-                          min="0"
-                          max="120"
-                          value={p.pauseBefore}
-                          onChange={(e) =>
-                            updatePour(i, { pauseBefore: +e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
                         Pause after (sec)
                         <input
                           type="number"
@@ -1152,8 +1130,6 @@ function App() {
                         height: `${Math.max(210, 170 + p.volume * 1.7)}px`,
                       }}
                     >
-                      {p.agitationBefore && <div className="agitation-marker before on" title="Agitation before"><Waves size={13} /></div>}
-                      {p.agitationAfter && <div className="agitation-marker after on" title="Agitation after"><Waves size={13} /></div>}
                       <header>
                         <b>{i + 1}</b>
                         <strong>
@@ -1163,13 +1139,14 @@ function App() {
                       </header>
                       <div className="summary-pattern">
                         <PatternGlyph pattern={p.pattern} active={true} />
+                        <strong>{p.temp}°C</strong>
                       </div>
+                      <span className="summary-step-name">{i===0?'Bloom':`Pour ${i+1}`}</span>
                       <div className="summary-facts">
-                        <span>{p.temp}°C</span>
                         <span>{p.flow.toFixed(1)}<small>ml/s</small></span>
                       </div>
-                      {p.pauseBefore>0&&<span className="pause-corner before">{p.pauseBefore}s</span>}
-                      {p.pauseAfter>0&&<span className="pause-corner after">{p.pauseAfter}s</span>}
+                      {(p.pauseBefore>0||p.agitationBefore)&&<span className="pause-corner before">{p.agitationBefore&&<Waves size={12}/>} {p.pauseBefore}s</span>}
+                      {(p.pauseAfter>0||p.agitationAfter)&&<span className="pause-corner after">{p.pauseAfter}s {p.agitationAfter&&<Waves size={12}/>}</span>}
                     </article>
                   ))}
                 </div>
@@ -1249,18 +1226,14 @@ function App() {
                   {brewComplete ? "BREW COMPLETE" : "LIVE BREW"}
                 </p>
                 <h2>{selected.name}</h2>
-                <p>
-                  {brewComplete ? "Your cup is ready." : brewEstimate.phase}
-                </p>
+                <p>{brewComplete ? "Your cup is ready." : brewTimingStarted ? brewEstimate.phase : selected.useGrinder ? "Grinding, settling & positioning" : "Settling & positioning"}</p>
               </div>
               <span
                 className={
                   brewComplete ? "session-state complete" : "session-state"
                 }
               >
-                {brewComplete
-                  ? "Complete"
-                  : `Step ${brewEstimate.step + 1} of ${selected.pours.length}`}
+                {brewComplete ? "Complete" : brewTimingStarted ? `Step ${brewEstimate.step + 1} of ${selected.pours.length}` : "Preparing"}
               </span>
             </div>
             <div className="session-stats">
@@ -1315,7 +1288,7 @@ function App() {
                 <div>
                   <p className="eyebrow">BREW TIMELINE</p>
                   <h3>
-                    {brewComplete ? "All steps finished" : brewEstimate.phase}
+                    {brewComplete ? "All steps finished" : brewTimingStarted ? brewEstimate.phase : "Waiting for water flow"}
                   </h3>
                 </div>
                 <span>
@@ -1326,9 +1299,9 @@ function App() {
               <div className="step-track">
                 {selected.pours.map((p, i) => {
                   const state =
-                    brewComplete || i < brewEstimate.step
+                    brewComplete || (brewTimingStarted && i < brewEstimate.step)
                       ? "done"
-                      : i === brewEstimate.step
+                      : brewTimingStarted && i === brewEstimate.step
                         ? "current"
                         : "upcoming";
                   return (
@@ -1343,7 +1316,9 @@ function App() {
                         </small>
                       </div>
                       <span className="step-status">
-                        {state === "current"
+                        {!brewTimingStarted
+                          ? "Waiting"
+                          : state === "current"
                           ? brewEstimate.phase
                           : state === "done"
                             ? "Done"
