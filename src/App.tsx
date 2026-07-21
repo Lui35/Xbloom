@@ -188,6 +188,7 @@ const initialRecipes: Recipe[] = [
 ];
 
 type BrewSample = { time: number; water: number; coffee: number };
+type BrewRecord = { id:number; recipeName:string; completedAt:string; duration:number; water:number; coffee:number; steps:number; simulated:boolean };
 type BrewEstimate = {
   water: number;
   step: number;
@@ -312,15 +313,7 @@ function PatternGlyph({
   }, [pattern, active]);
   return <canvas ref={ref} className="pattern-canvas" aria-hidden="true" />;
 }
-function BrewChart({
-  samples,
-  metric,
-  color,
-}: {
-  samples: BrewSample[];
-  metric: "water" | "coffee";
-  color: string;
-}) {
+function BrewChart({ samples }: { samples: BrewSample[] }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const node = canvas.current;
@@ -344,47 +337,36 @@ function BrewChart({
       ctx.stroke();
     }
     if (samples.length < 2) return;
-    const maxTime = Math.max(60, samples.at(-1)?.time || 60),
-      maxValue = Math.max(
-        metric === "water" ? 100 : 30,
-        ...samples.map((s) => s[metric]),
-      );
-    let filtered = samples[0][metric];
-    const points = samples.map((s) => {
-      filtered = filtered * 0.72 + s[metric] * 0.28;
-      return {
-        x: 36 + (s.time / maxTime) * (w - 48),
-        y: 12 + (1 - filtered / maxValue) * (h - 32),
-      };
+    const maxTime = Math.max(60, samples.at(-1)?.time || 60);
+    const maxValue = Math.max(100, ...samples.flatMap((s) => [s.water, s.coffee]));
+    (["water", "coffee"] as const).forEach((metric) => {
+      const color = metric === "water" ? "#68a8ff" : "#d9ff62";
+      let filtered = samples[0][metric];
+      const points = samples.map((s) => {
+        filtered = filtered * 0.72 + s[metric] * 0.28;
+        return { x: 36 + (s.time / maxTime) * (w - 48), y: 12 + (1 - filtered / maxValue) * (h - 32) };
+      });
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 5;
+      ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length - 1; i++) {
+        const midX = (points[i].x + points[i + 1].x) / 2, midY = (points[i].y + points[i + 1].y) / 2;
+        ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
+      }
+      const last = points.at(-1)!, before = points.at(-2)!;
+      ctx.quadraticCurveTo(before.x, before.y, last.x, last.y);
+      ctx.stroke();
     });
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 5;
-    ctx.globalAlpha = 0.95;
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-    for (let i = 1; i < points.length - 1; i++) {
-      const midX = (points[i].x + points[i + 1].x) / 2,
-        midY = (points[i].y + points[i + 1].y) / 2;
-      ctx.quadraticCurveTo(points[i].x, points[i].y, midX, midY);
-    }
-    const last = points.at(-1)!;
-    const before = points.at(-2)!;
-    ctx.quadraticCurveTo(before.x, before.y, last.x, last.y);
-    ctx.stroke();
     ctx.shadowBlur = 0;
     ctx.globalAlpha = 1;
-  }, [samples, metric, color]);
-  return (
-    <canvas
-      className="brew-chart"
-      ref={canvas}
-      aria-label={`Live chart of ${metric}`}
-    />
-  );
+  }, [samples]);
+  return <canvas className="brew-chart" ref={canvas} aria-label="Live chart of water poured and coffee collected" />;
 }
 const formatTime = (seconds: number) =>
   `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
@@ -492,9 +474,11 @@ function App() {
   const [brewComplete, setBrewComplete] = useState(false);
   const [brewTimingStarted, setBrewTimingStarted] = useState(false);
   const [simulation, setSimulation] = useState(false);
+  const [history, setHistory] = useState<BrewRecord[]>(() => { try { return JSON.parse(localStorage.getItem("xbloom-history") || "[]") } catch { return [] } });
   const brewStart = useRef(0),
     brewerWasActive = useRef(false),
-    brewWeightBaseline = useRef(0);
+    brewWeightBaseline = useRef(0),
+    brewRecorded = useRef(false);
   const [nav, setNav] = useState("Home");
   const navItems = useMemo(
     () => [
@@ -579,6 +563,13 @@ function App() {
     telemetry.brewerRunning,
     telemetry.state,
   ]);
+  useEffect(() => {
+    if (!brewComplete || brewRecorded.current) return;
+    brewRecorded.current = true;
+    const last = samples.at(-1);
+    const record:BrewRecord = { id:Date.now(), recipeName:selected.name, completedAt:new Date().toISOString(), duration:elapsed, water:last?.water||0, coffee:last?.coffee||0, steps:selected.pours.length, simulated:simulation };
+    setHistory((current) => { const next=[record,...current].slice(0,100); localStorage.setItem("xbloom-history",JSON.stringify(next)); return next });
+  }, [brewComplete, elapsed, samples, selected.name, selected.pours.length, simulation]);
 
   function updateRecipe(patch: Partial<Recipe>) {
     setRecipeDirty(true);
@@ -729,6 +720,7 @@ function App() {
         })),
       });
       brewerWasActive.current = false;
+      brewRecorded.current = false;
       setProgress(0);
       setElapsed(0);
       setSamples([{ time: 0, water: 0, coffee: 0 }]);
@@ -748,6 +740,7 @@ function App() {
     setSimulation(true);
     brewStart.current = Date.now();
     brewerWasActive.current = false;
+    brewRecorded.current = false;
     brewWeightBaseline.current = 0;
     setElapsed(0);
     setSamples([{ time: 0, water: 0, coffee: 0 }]);
@@ -1257,11 +1250,7 @@ function App() {
                 <h2>History</h2>
               </div>
             </div>
-            <div className="empty-card">
-              <History />
-              <h3>Your completed brews will appear here</h3>
-              <p>History recording will begin with your next brew.</p>
-            </div>
+            {history.length===0?<div className="empty-card"><History/><h3>Your completed brews will appear here</h3><p>History recording will begin with your next completed brew or simulation.</p></div>:<div className="history-list">{history.map(record=><article key={record.id}><span className="history-icon"><Coffee size={20}/></span><div><strong>{record.recipeName}</strong><small>{new Date(record.completedAt).toLocaleString()} · {record.steps} steps {record.simulated?'· Simulation':''}</small></div><b>{formatTime(record.duration)}</b><span>{record.water.toFixed(0)} ml</span><span>{record.coffee.toFixed(1)} g</span></article>)}</div>}
           </section>
         )}
 
@@ -1312,24 +1301,10 @@ function App() {
                 </strong>
               </div>
             </div>
-            <div className="graph-grid">
-              <article className="graph-card">
-                <div>
-                  <span className="graph-dot water" />
-                  <strong>Water poured</strong>
-                  <small>Estimated from each step's flow rate and time</small>
-                </div>
-                <BrewChart samples={samples} metric="water" color="#68a8ff" />
-              </article>
-              <article className="graph-card">
-                <div>
-                  <span className="graph-dot coffee" />
-                  <strong>Coffee collected</strong>
-                  <small>Live weight reported by the machine scale</small>
-                </div>
-                <BrewChart samples={samples} metric="coffee" color="#d9ff62" />
-              </article>
-            </div>
+            <article className="graph-card combined-graph">
+              <div className="combined-legend"><span><i className="graph-dot water"/><strong>Water poured</strong></span><span><i className="graph-dot coffee"/><strong>Coffee collected</strong></span><small>Live · {formatTime(elapsed)}</small></div>
+              <BrewChart samples={samples}/>
+            </article>
             <article className="step-card">
               <div className="step-card-heading">
                 <div>
@@ -1343,7 +1318,7 @@ function App() {
                   total
                 </span>
               </div>
-              <div className="step-track">
+              <div className="pour-bars live-pour-bars" style={{gridTemplateColumns:`repeat(${selected.pours.length}, minmax(0, 1fr))`}}>
                 {selected.pours.map((p, i) => {
                   const state =
                     brewComplete || (brewTimingStarted && i < brewEstimate.step)
@@ -1352,26 +1327,13 @@ function App() {
                         ? "current"
                         : "upcoming";
                   return (
-                    <div className={`timeline-step ${state}`} key={i}>
-                      <span className="step-number">
-                        {state === "done" ? "✓" : i + 1}
-                      </span>
-                      <div>
-                        <strong>{i === 0 ? "Bloom" : `Pour ${i + 1}`}</strong>
-                        <small>
-                          {p.volume} ml · {p.temp}°C · {p.flow.toFixed(1)} ml/s
-                        </small>
-                      </div>
-                      <span className="step-status">
-                        {!brewTimingStarted
-                          ? "Waiting"
-                          : state === "current"
-                          ? brewEstimate.phase
-                          : state === "done"
-                            ? "Done"
-                            : "Waiting"}
-                      </span>
-                    </div>
+                    <article className={`live-pour ${state}`} key={i} style={{height:`${Math.max(210,170+p.volume*1.7)}px`}}>
+                      <header><b>{state==='done'?'✓':i+1}</b><strong>{p.volume}<small>ml</small></strong></header>
+                      <div className="summary-pattern"><PatternGlyph pattern={p.pattern} active={state==='current'}/><strong>{p.temp}°C</strong></div>
+                      <span className="summary-step-name">{i===0?'Bloom':`Pour ${i+1}`}</span>
+                      <div className="summary-facts"><span>{p.pauseAfter}<small>sec</small></span></div>
+                      <span className="live-step-state">{!brewTimingStarted?'Waiting':state==='current'?brewEstimate.phase:state==='done'?'Done':'Waiting'}</span>
+                    </article>
                   );
                 })}
               </div>
@@ -1495,13 +1457,7 @@ function App() {
               </article>
               <article className="last-brew">
                 <p className="eyebrow">LAST BREW</p>
-                <div>
-                  <strong>Citrus Study</strong>
-                  <span>Today, 9:42 AM</span>
-                </div>
-                <b className="rating">
-                  4.8 <span>★</span>
-                </b>
+                {history[0]?<><div><strong>{history[0].recipeName}</strong><span>{new Date(history[0].completedAt).toLocaleString()} {history[0].simulated?'· Simulation':''}</span></div><b className="last-duration">{formatTime(history[0].duration)}</b></>:<><div><strong>No completed brews</strong><span>Run a brew or simulation to begin</span></div><b className="last-duration">—</b></>}
               </article>
             </div>
           </section>
