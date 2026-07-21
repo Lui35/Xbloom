@@ -10,6 +10,8 @@
     "dev:api": "..\\PyBloom\\.venv\\Scripts\\python.exe -m uvicorn server.app:app --host 127.0.0.1 --port 8766 --reload",
     "dev:desktop": "concurrently -k \"npm:dev:api\" \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc -b && vite build",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "preview": "vite preview",
     "start": "electron .",
     "package": "npm run build && electron-builder"
@@ -50,6 +52,7 @@
     "concurrently": "latest",
     "electron": "latest",
     "electron-builder": "latest",
+    "prettier": "^3.9.6",
     "typescript": "latest",
     "wait-on": "latest"
   }
