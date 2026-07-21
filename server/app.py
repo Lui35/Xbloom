@@ -25,8 +25,22 @@ from xbloom import XBloomClient
 from xbloom.models.types import CupType, PourPattern, PourStep, VibrationPattern, XBloomRecipe
 from xbloom.scanner import discover_devices
 
+DEVICE_CACHE_FILE = PROJECT_ROOT / ".xbloom-device.json"
+
+
+def load_cached_address() -> str | None:
+    try:
+        return str(json.loads(DEVICE_CACHE_FILE.read_text(encoding="utf-8"))["address"])
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
+
+
+def save_cached_address(address: str) -> None:
+    DEVICE_CACHE_FILE.write_text(json.dumps({"address": address}), encoding="utf-8")
+
+
 client: XBloomClient | None = None
-device_address: str | None = None
+device_address: str | None = load_cached_address()
 operation_lock = asyncio.Lock()
 
 
@@ -413,21 +427,52 @@ async def devices():
 @app.post("/api/connect")
 async def connect(request: ConnectRequest):
     global client, device_address
-    address = request.address
-    if not address:
-        found = await discover_devices(timeout=7)
-        if not found:
-            raise HTTPException(404, "No xBloom machine found. Make sure it is on and disconnect the phone app.")
-        address = found[0].address
     if client and client.is_connected:
         return status_payload()
-    device_address = address
-    client = XBloomClient(address)
-    client._cleanup_on_disconnect = False
-    if not await client.connect(timeout=20):
+
+    async def attempt(address: str) -> bool:
+        global client, device_address
+        device_address = address
+        candidate = XBloomClient(address)
+        candidate._cleanup_on_disconnect = False
+        try:
+            connected = await candidate.connect(timeout=12)
+        except Exception:
+            connected = False
+        if connected:
+            client = candidate
+            save_cached_address(address)
+            return True
+        try:
+            await candidate.disconnect()
+        except Exception:
+            pass
         client = None
-        raise HTTPException(503, "The xBloom was found but the Bluetooth connection failed.")
-    return status_payload()
+        return False
+
+    cached = request.address or device_address or load_cached_address()
+    if cached and await attempt(cached):
+        return status_payload()
+
+    for _ in range(2):
+        found = await discover_devices(timeout=6)
+        for device in found:
+            if await attempt(device.address):
+                return status_payload()
+        await asyncio.sleep(0.5)
+
+    raise HTTPException(
+        404,
+        "No xBloom machine found after retrying. Disconnect the phone app, then cycle Bluetooth if needed.",
+    )
+
+
+@app.post("/api/bluetooth/settings")
+async def open_bluetooth_settings():
+    if sys.platform != "win32":
+        raise HTTPException(400, "Bluetooth settings shortcut is only available on Windows.")
+    os.startfile("ms-settings:bluetooth")
+    return {"opened": True}
 
 
 @app.post("/api/disconnect")

@@ -418,6 +418,15 @@ export function useAppController() {
       setScanning(false);
     }
   }
+  async function openBluetoothSettings() {
+    try {
+      await xbloomApi.openBluetoothSettings();
+    } catch (error) {
+      setConnectionError(
+        error instanceof Error ? error.message : "Could not open Bluetooth settings.",
+      );
+    }
+  }
   async function startBrew() {
     if (recipeDirty) {
       setConnectionError("Save your recipe changes before starting a brew.");
@@ -538,6 +547,7 @@ export function useAppController() {
     newRecipe,
     removeRecipe,
     toggleConnection,
+    openBluetoothSettings,
     startBrew,
     stopBrew,
   };

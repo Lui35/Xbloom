@@ -31,6 +31,7 @@ function App() {
     openBeanEditor,
     openAI,
     toggleConnection,
+    openBluetoothSettings,
   } = controller;
   return (
     <div className="app-shell">
@@ -89,7 +90,14 @@ function App() {
                   ? "Disconnect Studio"
                   : "Connect machine"}
             </button>
-            {connectionError && <span>{connectionError}</span>}
+            {connectionError && (
+              <div className="connection-help">
+                <span>{connectionError}</span>
+                <button type="button" onClick={openBluetoothSettings}>
+                  Open Bluetooth settings
+                </button>
+              </div>
+            )}
           </div>
         </header>
         {waterAlert && (

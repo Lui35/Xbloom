@@ -12,3 +12,4 @@ vite.config.d.ts
 .env
 .env.*
 !.env.example
+.xbloom-device.json

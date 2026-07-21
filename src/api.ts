@@ -77,6 +77,8 @@ async function call<T>(path: string, options?: RequestInit): Promise<T> {
 export const xbloomApi = {
   health: () => call<{ ok: boolean }>("/health"),
   connect: () => call<MachineStatus>("/connect", { method: "POST", body: "{}" }),
+  openBluetoothSettings: () =>
+    call<{ opened: boolean }>("/bluetooth/settings", { method: "POST", body: "{}" }),
   disconnect: () => call<MachineStatus>("/disconnect", { method: "POST" }),
   status: () => call<MachineStatus>("/status"),
   stop: () => call<{ stopped: boolean }>("/stop", { method: "POST" }),
