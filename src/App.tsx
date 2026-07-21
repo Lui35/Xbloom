@@ -1027,19 +1027,16 @@ function App() {
                           ))}
                         </select>
                       </label>
-                      <label>
-                        Pause after (sec)
-                        <input
-                          type="number"
-                          min="0"
-                          max="120"
-                          value={p.pauseAfter}
-                          onChange={(e) =>
-                            updatePour(i, { pauseAfter: +e.target.value })
-                          }
-                        />
-                      </label>
                     </div>
+                    <RangeBox
+                      label="Pause after"
+                      value={p.pauseAfter}
+                      min={0}
+                      max={60}
+                      unit="sec"
+                      hint="Rest before the next pour"
+                      onChange={(pauseAfter) => updatePour(i, { pauseAfter })}
+                    />
                     <fieldset className="pattern-picker">
                       <legend>Pour pattern</legend>
                       {(["center", "circular", "spiral"] as const).map(
@@ -1145,8 +1142,8 @@ function App() {
                       <div className="summary-facts">
                         <span>{p.flow.toFixed(1)}<small>ml/s</small></span>
                       </div>
-                      {(p.pauseBefore>0||p.agitationBefore)&&<span className="pause-corner before">{p.agitationBefore&&<Waves size={12}/>} {p.pauseBefore}s</span>}
-                      {(p.pauseAfter>0||p.agitationAfter)&&<span className="pause-corner after">{p.pauseAfter}s {p.agitationAfter&&<Waves size={12}/>}</span>}
+                      {p.agitationBefore&&<span className="pause-corner before"><Waves size={12}/></span>}
+                      <span className="pause-corner after">{p.pauseAfter}s {p.agitationAfter&&<Waves size={12}/>}</span>
                     </article>
                   ))}
                 </div>
