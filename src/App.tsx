@@ -491,6 +491,7 @@ function App() {
   const [samples, setSamples] = useState<BrewSample[]>([]);
   const [brewComplete, setBrewComplete] = useState(false);
   const [brewTimingStarted, setBrewTimingStarted] = useState(false);
+  const [simulation, setSimulation] = useState(false);
   const brewStart = useRef(0),
     brewerWasActive = useRef(false),
     brewWeightBaseline = useRef(0);
@@ -508,11 +509,11 @@ function App() {
   useEffect(() => {
     if (!brewing || !brewTimingStarted) return;
     const timer = setInterval(
-      () => setElapsed(Math.floor((Date.now() - brewStart.current) / 1000)),
+      () => setElapsed(Math.floor(((Date.now() - brewStart.current) / 1000) * (simulation ? 4 : 1))),
       250,
     );
     return () => clearInterval(timer);
-  }, [brewing, brewTimingStarted]);
+  }, [brewing, brewTimingStarted, simulation]);
 
   useEffect(() => {
     const poll = setInterval(async () => {
@@ -536,13 +537,13 @@ function App() {
   }, [connected, telemetry.waterLevelOk]);
   const brewEstimate = estimateBrew(selected, elapsed);
   useEffect(() => {
-    if (!brewing || brewTimingStarted || !telemetry.brewerRunning) return;
+    if (simulation || !brewing || brewTimingStarted || !telemetry.brewerRunning) return;
     brewStart.current = Date.now();
     brewWeightBaseline.current = telemetry.weight || brewWeightBaseline.current;
     setElapsed(0);
     setSamples([{ time: 0, water: 0, coffee: 0 }]);
     setBrewTimingStarted(true);
-  }, [brewing, brewTimingStarted, telemetry.brewerRunning, telemetry.weight]);
+  }, [simulation, brewing, brewTimingStarted, telemetry.brewerRunning, telemetry.weight]);
   useEffect(() => {
     if (!brewing || !brewTimingStarted) return;
     setSamples((list) =>
@@ -551,28 +552,28 @@ function App() {
         {
           time: elapsed,
           water: brewEstimate.water,
-          coffee: Math.max(
-            0,
-            (telemetry.weight || 0) - brewWeightBaseline.current,
-          ),
+          coffee: simulation
+            ? estimateBrew(selected, Math.max(0, elapsed - 4)).water * 0.82
+            : Math.max(0, (telemetry.weight || 0) - brewWeightBaseline.current),
         },
       ].slice(-900),
     );
-  }, [brewing, brewTimingStarted, elapsed, brewEstimate.water, telemetry.weight]);
+  }, [brewing, brewTimingStarted, simulation, selected, elapsed, brewEstimate.water, telemetry.weight]);
   useEffect(() => {
     if (telemetry.brewerRunning) brewerWasActive.current = true;
     if (!brewing || !brewTimingStarted) return;
-    if (
+    if (simulation ? brewEstimate.complete : (
       telemetry.state === "complete" ||
       (brewerWasActive.current && !telemetry.brewerRunning && elapsed > 10) ||
       elapsed >= brewEstimate.totalTime + 15
-    ) {
+    )) {
       setBrewing(false);
       setBrewComplete(true);
     }
   }, [
     brewing,
     brewTimingStarted,
+    simulation,
     elapsed,
     brewEstimate.totalTime,
     telemetry.brewerRunning,
@@ -706,6 +707,7 @@ function App() {
     )
       return;
     setConnectionError("");
+    setSimulation(false);
     try {
       brewWeightBaseline.current = telemetry.weight || 0;
       await xbloomApi.brew({
@@ -741,7 +743,27 @@ function App() {
       );
     }
   }
+  function startSimulation() {
+    setConnectionError("");
+    setSimulation(true);
+    brewStart.current = Date.now();
+    brewerWasActive.current = false;
+    brewWeightBaseline.current = 0;
+    setElapsed(0);
+    setSamples([{ time: 0, water: 0, coffee: 0 }]);
+    setBrewComplete(false);
+    setWaterAlert(false);
+    setBrewTimingStarted(true);
+    setBrewing(true);
+    setNav("Brew");
+  }
   async function stopBrew() {
+    if (simulation) {
+      setBrewing(false);
+      setSimulation(false);
+      setNav("Home");
+      return;
+    }
     try {
       await xbloomApi.stop();
       setBrewing(false);
@@ -1248,7 +1270,7 @@ function App() {
             <div className="session-heading">
               <div>
                 <p className="eyebrow">
-                  {brewComplete ? "BREW COMPLETE" : "LIVE BREW"}
+                  {brewComplete ? (simulation ? "SIMULATION COMPLETE" : "BREW COMPLETE") : simulation ? "BREW SIMULATION · 4× SPEED" : "LIVE BREW"}
                 </p>
                 <h2>{selected.name}</h2>
                 <p>{brewComplete ? "Your cup is ready." : brewTimingStarted ? brewEstimate.phase : selected.useGrinder ? "Grinding, settling & positioning" : "Settling & positioning"}</p>
@@ -1371,7 +1393,8 @@ function App() {
                 <span>→</span>
               </button>
             )}
-            {!connected && brewing && (
+            {simulation && brewing && <p className="simulation-note">Simulation only — no commands are being sent to your xBloom.</p>}
+            {!simulation && !connected && brewing && (
               <p className="session-note">
                 Machine connection was lost. Water remains estimated from the
                 recipe timeline.
@@ -1427,17 +1450,13 @@ function App() {
                   </span>
                 </div>
               </div>
-              <button
-                className={brewing ? "primary stop" : "primary"}
-                onClick={brewing ? stopBrew : startBrew}
-              >
-                {brewing
-                  ? `Stop brew · ${formatTime(elapsed)}`
-                  : connected
-                    ? "Start brew"
-                    : "Connect & brew"}
-                <span>{brewing ? "■" : "→"}</span>
-              </button>
+              <div className="brew-actions-main">
+                <button className="simulate-button" onClick={startSimulation} disabled={brewing}>Simulate brew <span>▶</span></button>
+                <button className={brewing ? "primary stop" : "primary"} onClick={brewing ? stopBrew : startBrew}>
+                  {brewing ? `Stop brew · ${formatTime(elapsed)}` : connected ? "Start brew" : "Connect & brew"}
+                  <span>{brewing ? "■" : "→"}</span>
+                </button>
+              </div>
               {connectionError && (
                 <p className="brew-error" role="alert">
                   {connectionError}
