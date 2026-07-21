@@ -1,0 +1,22 @@
+FROM python:3.12-slim
+
+ARG PYBLOOM_COMMIT=a4438abe2b2f428a397ff6150dd43d0a420a3555
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY server/requirements.txt /app/server/requirements.txt
+RUN pip install --no-cache-dir -r /app/server/requirements.txt \
+    && pip install --no-cache-dir "git+https://github.com/fhenwood/PyBloom.git@${PYBLOOM_COMMIT}"
+
+COPY server /app/server
+
+EXPOSE 8766
+
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8766"]

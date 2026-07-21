@@ -16,16 +16,17 @@ from dotenv import load_dotenv
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env")
 
-PYBLOOM_SRC = Path(__file__).resolve().parents[2] / "PyBloom" / "src"
-if not PYBLOOM_SRC.exists():
-    raise RuntimeError(f"PyBloom was not found at {PYBLOOM_SRC}")
-sys.path.insert(0, str(PYBLOOM_SRC))
+PYBLOOM_SRC = Path(
+    os.getenv("PYBLOOM_SRC", str(Path(__file__).resolve().parents[2] / "PyBloom" / "src"))
+)
+if PYBLOOM_SRC.exists():
+    sys.path.insert(0, str(PYBLOOM_SRC))
 
 from xbloom import XBloomClient
 from xbloom.models.types import CupType, PourPattern, PourStep, VibrationPattern, XBloomRecipe
 from xbloom.scanner import discover_devices
 
-DEVICE_CACHE_FILE = PROJECT_ROOT / ".xbloom-device.json"
+DEVICE_CACHE_FILE = Path(os.getenv("XBLOOM_DEVICE_CACHE", PROJECT_ROOT / ".xbloom-device.json"))
 
 
 def load_cached_address() -> str | None:
