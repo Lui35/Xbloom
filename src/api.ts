@@ -31,6 +31,8 @@ export type AIBeanProfile = {
 export type AIRecipeResult = {
   name: string;
   rationale: string;
+  brew_style: "hot" | "iced" | "cold";
+  ice_grams: number;
   grind: number;
   rpm: 60 | 70 | 80 | 90 | 100 | 110 | 120;
   dose: number;

@@ -22,6 +22,8 @@ export function useAppController() {
           ...r,
           unit: r.unit || "ml",
           useGrinder: r.useGrinder !== false,
+          brewStyle: r.brewStyle || "hot",
+          iceGrams: r.iceGrams || 0,
           pours: r.pours.map((p: Pour, i: number) => ({
             volume: p.volume,
             temp: p.temp || r.temp,
@@ -282,6 +284,7 @@ export function useAppController() {
   function saveAIRecipe() {
     if (!aiResult) return;
     const total = aiResult.pours.reduce((sum, p) => sum + p.volume, 0);
+    const ratioWater = total + (aiResult.brew_style === "iced" ? aiResult.ice_grams : 0);
     const id = Date.now();
     const sourceBean = aiBean;
     const recipe: Recipe = {
@@ -291,7 +294,7 @@ export function useAppController() {
       origin:
         [sourceBean.country, sourceBean.region].filter(Boolean).join(" · ") || "AI coffee profile",
       temp: aiResult.pours[0].temp,
-      ratio: `1:${(total / aiResult.dose).toFixed(1)}`,
+      ratio: `1:${(ratioWater / aiResult.dose).toFixed(1)}`,
       duration: formatTime(
         Math.round(aiResult.pours.reduce((sum, p) => sum + p.volume / p.flow + p.pauseAfter, 0)),
       ),
@@ -301,6 +304,8 @@ export function useAppController() {
       dose: aiResult.dose,
       unit: "ml",
       useGrinder: true,
+      brewStyle: aiResult.brew_style,
+      iceGrams: aiResult.ice_grams,
       bean: sourceBean,
       beanId: selectedBeanId || undefined,
       pours: aiResult.pours.map((p, i) => ({ ...p, pauseBefore: i === 0 ? 5 : 0 })),

@@ -52,7 +52,14 @@ export function RecipesPage({ controller }: { controller: AppController }) {
               <span className="bean" style={{ background: r.color }} />
               <span>
                 <strong>{r.name}</strong>
-                <small>{r.origin}</small>
+                <small>
+                  {r.origin} ·{" "}
+                  {r.brewStyle === "iced"
+                    ? `Iced · ${r.iceGrams}g ice`
+                    : r.brewStyle === "cold"
+                      ? "Cold"
+                      : "Hot"}
+                </small>
               </span>
             </button>
           ))}
@@ -78,6 +85,34 @@ export function RecipesPage({ controller }: { controller: AppController }) {
               <input
                 value={selected.origin}
                 onChange={(e) => updateRecipe({ origin: e.target.value })}
+              />
+            </label>
+            <label>
+              Brew style
+              <select
+                value={selected.brewStyle}
+                onChange={(e) => {
+                  const brewStyle = e.target.value as Recipe["brewStyle"];
+                  updateRecipe({
+                    brewStyle,
+                    iceGrams: brewStyle === "iced" ? selected.iceGrams : 0,
+                  });
+                }}
+              >
+                <option value="hot">Hot</option>
+                <option value="iced">Iced pour-over</option>
+                <option value="cold">Cold</option>
+              </select>
+            </label>
+            <label>
+              Ice weight (g)
+              <input
+                type="number"
+                min={0}
+                max={500}
+                disabled={selected.brewStyle !== "iced"}
+                value={selected.iceGrams}
+                onChange={(e) => updateRecipe({ iceGrams: +e.target.value })}
               />
             </label>
           </div>

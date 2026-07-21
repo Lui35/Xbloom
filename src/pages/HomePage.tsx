@@ -30,7 +30,12 @@ export function HomePage({ controller }: { controller: AppController }) {
               <p className="eyebrow">READY TO BREW</p>
               <h2>{selected.name}</h2>
               <p>
-                {selected.roaster} · {selected.origin}
+                {selected.roaster} · {selected.origin} ·{" "}
+                {selected.brewStyle === "iced"
+                  ? `Iced · ${selected.iceGrams}g ice`
+                  : selected.brewStyle === "cold"
+                    ? "Cold"
+                    : "Hot"}
               </p>
             </div>
             <button className="ghost" onClick={() => setNav("Recipes")}>
@@ -156,7 +161,14 @@ export function HomePage({ controller }: { controller: AppController }) {
               <span className="bean" style={{ background: r.color }} />
               <span>
                 <strong>{r.name}</strong>
-                <small>{r.origin}</small>
+                <small>
+                  {r.origin} ·{" "}
+                  {r.brewStyle === "iced"
+                    ? `Iced · ${r.iceGrams}g ice`
+                    : r.brewStyle === "cold"
+                      ? "Cold"
+                      : "Hot"}
+                </small>
               </span>
               <b>Grind {r.grind}</b>
             </button>

@@ -64,6 +64,14 @@ export function BrewPage({ controller }: { controller: AppController }) {
             {brewComplete ? 0 : Math.max(0, selected.pours.length - brewEstimate.step - 1)}
           </strong>
         </div>
+        {selected.brewStyle === "iced" && (
+          <div>
+            <small>ICE IN SERVER</small>
+            <strong>
+              {selected.iceGrams} <i>g</i>
+            </strong>
+          </div>
+        )}
       </div>
       <article className="graph-card combined-graph">
         <div className="combined-legend">

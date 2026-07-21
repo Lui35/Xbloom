@@ -33,6 +33,8 @@ export const initialRecipes: Recipe[] = [
     dose: 18,
     unit: "ml",
     useGrinder: true,
+    brewStyle: "hot",
+    iceGrams: 0,
     pours: [
       {
         volume: 50,
@@ -80,6 +82,8 @@ export const initialRecipes: Recipe[] = [
     dose: 18,
     unit: "ml",
     useGrinder: true,
+    brewStyle: "hot",
+    iceGrams: 0,
     pours: [
       {
         volume: 55,
@@ -127,6 +131,8 @@ export const initialRecipes: Recipe[] = [
     dose: 17,
     unit: "g",
     useGrinder: true,
+    brewStyle: "hot",
+    iceGrams: 0,
     pours: [
       {
         volume: 50,

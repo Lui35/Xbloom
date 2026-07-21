@@ -336,8 +336,17 @@ export function AppModals({ controller }: { controller: AppController }) {
                     Dose <b>{aiResult.dose}g</b>
                   </span>
                   <span>
-                    Water <b>{aiResult.pours.reduce((s, p) => s + p.volume, 0)}ml</b>
+                    Machine water <b>{aiResult.pours.reduce((s, p) => s + p.volume, 0)}ml</b>
                   </span>
+                  <span>
+                    Style{" "}
+                    <b>{aiResult.brew_style === "iced" ? "Iced pour-over" : aiResult.brew_style}</b>
+                  </span>
+                  {aiResult.brew_style === "iced" && (
+                    <span>
+                      Ice <b>{aiResult.ice_grams}g</b>
+                    </span>
+                  )}
                 </div>
                 <div className="ai-preview-pours">
                   {aiResult.pours.map((p, i) => (

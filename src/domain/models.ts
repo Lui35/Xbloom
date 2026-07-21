@@ -28,6 +28,8 @@ export type Recipe = {
   dose: number;
   unit: "g" | "ml";
   useGrinder: boolean;
+  brewStyle: "hot" | "iced" | "cold";
+  iceGrams: number;
   bean?: AIBeanProfile;
   beanId?: number;
   pours: Pour[];
