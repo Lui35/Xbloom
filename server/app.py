@@ -68,6 +68,7 @@ class BeanProfile(BaseModel):
     variety: str | None = Field(default=None, max_length=100)
     process: str | None = Field(default=None, max_length=100)
     bean_size: str | None = Field(default=None, max_length=80)
+    process_detail: str | None = Field(default=None, max_length=200)
     infused_with: str | None = Field(default=None, max_length=150)
     altitude_masl: int | None = Field(default=None, ge=0, le=3000)
     roast_level: str | None = Field(default=None, max_length=50)

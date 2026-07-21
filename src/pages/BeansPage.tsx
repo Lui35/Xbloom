@@ -1,5 +1,6 @@
 import { Coffee, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { Bean } from "../domain/models";
+import { processDetailConfig } from "../domain/beanProcessing";
 
 type Props = {
   beans: Bean[];
@@ -22,55 +23,58 @@ export function BeansPage({ beans, openBeanEditor, openAI, saveBeans }: Props) {
       </div>
       {beans.length ? (
         <div className="bean-library">
-          {beans.map((bean) => (
-            <article key={bean.id}>
-              <div className="bean-card-mark">
-                <Coffee />
-              </div>
-              <div>
-                <small>{bean.roaster || "YOUR COFFEE"}</small>
-                <h3>{bean.name}</h3>
-                <p>
-                  {[bean.country, bean.region, bean.variety].filter(Boolean).join(" · ") ||
-                    "Origin details not added"}
-                </p>
-                <div className="bean-tags">
-                  {[
-                    bean.process,
-                    bean.bean_size,
-                    bean.infused_with ? `Infused: ${bean.infused_with}` : "",
-                    bean.roast_level,
-                    bean.altitude_masl ? `${bean.altitude_masl} masl` : "",
-                  ]
-                    .filter(Boolean)
-                    .map((value) => (
-                      <span key={String(value)}>{value}</span>
-                    ))}
+          {beans.map((bean) => {
+            const detail = bean.process_detail || bean.infused_with;
+            return (
+              <article key={bean.id}>
+                <div className="bean-card-mark">
+                  <Coffee />
                 </div>
-                {bean.tasting_notes && <blockquote>{bean.tasting_notes}</blockquote>}
-              </div>
-              <footer>
-                <button className="ai-button" onClick={() => openAI("create", bean)}>
-                  <Sparkles size={16} /> Create recipe with AI
-                </button>
-                <span className="bean-card-actions">
-                  <button className="ai-secondary" onClick={() => openBeanEditor(bean)}>
-                    Edit
+                <div>
+                  <small>{bean.roaster || "YOUR COFFEE"}</small>
+                  <h3>{bean.name}</h3>
+                  <p>
+                    {[bean.country, bean.region, bean.variety].filter(Boolean).join(" · ") ||
+                      "Origin details not added"}
+                  </p>
+                  <div className="bean-tags">
+                    {[
+                      bean.process,
+                      bean.bean_size,
+                      detail ? `${processDetailConfig(bean.process).label}: ${detail}` : "",
+                      bean.roast_level,
+                      bean.altitude_masl ? `${bean.altitude_masl} masl` : "",
+                    ]
+                      .filter(Boolean)
+                      .map((value) => (
+                        <span key={String(value)}>{value}</span>
+                      ))}
+                  </div>
+                  {bean.tasting_notes && <blockquote>{bean.tasting_notes}</blockquote>}
+                </div>
+                <footer>
+                  <button className="ai-button" onClick={() => openAI("create", bean)}>
+                    <Sparkles size={16} /> Create recipe with AI
                   </button>
-                  <button
-                    className="bean-delete"
-                    aria-label={`Remove ${bean.name}`}
-                    onClick={() => {
-                      if (window.confirm(`Remove “${bean.name}” from My Beans?`))
-                        saveBeans(beans.filter((b) => b.id !== bean.id));
-                    }}
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </span>
-              </footer>
-            </article>
-          ))}
+                  <span className="bean-card-actions">
+                    <button className="ai-secondary" onClick={() => openBeanEditor(bean)}>
+                      Edit
+                    </button>
+                    <button
+                      className="bean-delete"
+                      aria-label={`Remove ${bean.name}`}
+                      onClick={() => {
+                        if (window.confirm(`Remove “${bean.name}” from My Beans?`))
+                          saveBeans(beans.filter((b) => b.id !== bean.id));
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </span>
+                </footer>
+              </article>
+            );
+          })}
         </div>
       ) : (
         <div className="empty-beans">

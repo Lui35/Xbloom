@@ -51,7 +51,10 @@ export function useAppController() {
   const [aiRating, setAiRating] = useState(4);
   const [beans, setBeans] = useState<Bean[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem("xbloom-beans") || "[]");
+      return JSON.parse(localStorage.getItem("xbloom-beans") || "[]").map((bean: Bean) => ({
+        ...bean,
+        process_detail: bean.process_detail || bean.infused_with || "",
+      }));
     } catch {
       return [];
     }

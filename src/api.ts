@@ -23,6 +23,8 @@ export type AIBeanProfile = {
   variety?: string;
   process?: string;
   bean_size?: string;
+  process_detail?: string;
+  /** Legacy field retained so previously saved beans can be migrated. */
   infused_with?: string;
   altitude_masl?: number;
   roast_level?: string;

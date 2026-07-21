@@ -1,6 +1,7 @@
 import { Coffee, LoaderCircle, Save, Sparkles, X } from "lucide-react";
 import type { AIBeanProfile } from "../api";
 import type { AppController } from "../controllers/useAppController";
+import { processDetailConfig } from "../domain/beanProcessing";
 
 export function AppModals({ controller }: { controller: AppController }) {
   const {
@@ -27,6 +28,7 @@ export function AppModals({ controller }: { controller: AppController }) {
     runAI,
     saveAIRecipe,
   } = controller;
+  const processDetail = processDetailConfig(aiBean.process);
   return (
     <>
       {beanEditor && (
@@ -112,7 +114,9 @@ export function AppModals({ controller }: { controller: AppController }) {
                 Process
                 <select
                   value={aiBean.process || ""}
-                  onChange={(e) => setAiBean({ ...aiBean, process: e.target.value })}
+                  onChange={(e) =>
+                    setAiBean({ ...aiBean, process: e.target.value, process_detail: "" })
+                  }
                 >
                   {[
                     "Washed",
@@ -139,11 +143,11 @@ export function AppModals({ controller }: { controller: AppController }) {
                 />
               </label>
               <label>
-                Infused with
+                {processDetail.label}
                 <input
-                  placeholder="Optional — e.g. strawberry, cinnamon"
-                  value={aiBean.infused_with || ""}
-                  onChange={(e) => setAiBean({ ...aiBean, infused_with: e.target.value })}
+                  placeholder={processDetail.placeholder}
+                  value={aiBean.process_detail || aiBean.infused_with || ""}
+                  onChange={(e) => setAiBean({ ...aiBean, process_detail: e.target.value })}
                 />
               </label>
               <label>
