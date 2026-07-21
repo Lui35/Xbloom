@@ -609,7 +609,7 @@ function App() {
     finally{setAiLoading(false)}
   }
   useEffect(()=>{if(!aiLoading)return;const started=Date.now();const timer=window.setInterval(()=>setAiElapsed(Math.floor((Date.now()-started)/1000)),1000);return()=>window.clearInterval(timer)},[aiLoading])
-  function saveAIRecipe(){if(!aiResult)return;const total=aiResult.pours.reduce((sum,p)=>sum+p.volume,0);const id=Date.now();const sourceBean=aiBean;const recipe:Recipe={id,name:`${sourceBean.name||"Coffee"} — ${aiResult.name}`,roaster:sourceBean.roaster||"AI generated",origin:[sourceBean.country,sourceBean.region].filter(Boolean).join(" · ")||"AI coffee profile",temp:aiResult.pours[0].temp,ratio:`1:${(total/aiResult.dose).toFixed(1)}`,duration:formatTime(Math.round(aiResult.pours.reduce((sum,p)=>sum+p.volume/p.flow+p.pauseAfter,0))),color:aiMode==="enhance"?selected.color:"#8aa76b",grind:aiResult.grind,rpm:aiResult.rpm,dose:aiResult.dose,unit:"ml",useGrinder:true,bean:sourceBean,beanId:selectedBeanId||undefined,pours:aiResult.pours.map((p,i)=>({...p,pauseBefore:i===0?5:0}))};const next=[...recipes,recipe];setRecipes(next);setSelectedId(id);setRecipeDirty(true);setAiMode(null);setAiResult(null)}
+  function saveAIRecipe(){if(!aiResult)return;const total=aiResult.pours.reduce((sum,p)=>sum+p.volume,0);const id=Date.now();const sourceBean=aiBean;const recipe:Recipe={id,name:`${sourceBean.name||"Coffee"} — ${aiResult.name}`,roaster:sourceBean.roaster||"AI generated",origin:[sourceBean.country,sourceBean.region].filter(Boolean).join(" · ")||"AI coffee profile",temp:aiResult.pours[0].temp,ratio:`1:${(total/aiResult.dose).toFixed(1)}`,duration:formatTime(Math.round(aiResult.pours.reduce((sum,p)=>sum+p.volume/p.flow+p.pauseAfter,0))),color:aiMode==="enhance"?selected.color:"#8aa76b",grind:aiResult.grind,rpm:aiResult.rpm,dose:aiResult.dose,unit:"ml",useGrinder:true,bean:sourceBean,beanId:selectedBeanId||undefined,pours:aiResult.pours.map((p,i)=>({...p,pauseBefore:i===0?5:0}))};const next=[...recipes,recipe];setRecipes(next);savedRecipes.current=structuredClone(next);localStorage.setItem("xbloom-recipes",JSON.stringify(next));setSelectedId(id);setRecipeDirty(false);setAiMode(null);setAiResult(null)}
   function selectRecipe(id: number) {
     if (id === selected.id) return;
     if (recipeDirty && !window.confirm("Discard your unsaved recipe changes?")) return;
@@ -1062,7 +1062,7 @@ function App() {
                       label="Water volume"
                       value={p.volume}
                       min={0}
-                      max={100}
+                      max={240}
                       unit={selected.unit}
                       hint={`Pour ${i + 1} of ${selected.pours.length}`}
                       onChange={(volume) => updatePour(i, { volume })}

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import math
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -34,7 +35,7 @@ class ConnectRequest(BaseModel):
 
 
 class PourInput(BaseModel):
-    volume: int = Field(ge=0, le=100)
+    volume: int = Field(ge=0, le=240)
     temperature: int = Field(ge=80, le=96)
     pause_before: int = Field(default=0, ge=0, le=120)
     pause_after: int = Field(default=0, ge=0, le=120)
@@ -73,7 +74,7 @@ class BeanProfile(BaseModel):
 
 
 class AIRecipePour(BaseModel):
-    volume: int = Field(ge=0, le=100)
+    volume: int = Field(ge=0, le=240)
     temp: int = Field(ge=80, le=96)
     flow: float = Field(ge=3.0, le=3.5)
     pauseAfter: int = Field(ge=0, le=60)
@@ -117,7 +118,7 @@ def normalize_ai_recipe(raw: str) -> dict[str, Any]:
     for pour in pours[:8]:
         pattern = patterns.get(str(pour.get("pattern", "center")).lower(), str(pour.get("pattern", "center")).lower())
         normalized.append({
-            "volume": max(0, min(100, round(float(pour.get("volume", 0))))),
+            "volume": max(0, min(240, round(float(pour.get("volume", 0))))),
             "temp": max(80, min(96, round(float(pour.get("temp", 93))))),
             "flow": max(3.0, min(3.5, float(pour.get("flow", 3.2)))),
             "pauseAfter": max(0, min(60, round(float(pour.get("pauseAfter", 0))))),
@@ -127,6 +128,65 @@ def normalize_ai_recipe(raw: str) -> dict[str, Any]:
         })
     data["pours"] = normalized
     return data
+
+
+def recommended_pour_count(profile: BeanProfile) -> int:
+    details = " ".join(filter(None, (profile.roast_level, profile.process, profile.tasting_notes, profile.desired_cup))).lower()
+    roast = (profile.roast_level or "").lower()
+    body_markers = ("full body", "low acidity", "chocolate", "nutty", "nuts")
+    clarity_markers = ("light", "washed", "clarity", "floral", "tea-like", "high extraction", "delicate")
+    if roast in ("medium", "medium-dark", "dark") or any(marker in details for marker in body_markers):
+        preferred = 3
+    elif sum(marker in details for marker in clarity_markers) >= 2:
+        preferred = 5
+    else:
+        preferred = 4
+    bloom = min(240, round(profile.dose * 2.5))
+    minimum_for_volume = 1 + math.ceil(max(0, profile.target_water - bloom) / 240)
+    return max(preferred, minimum_for_volume)
+
+
+def fit_recipe_to_profile(recipe: AIRecipeResult, profile: BeanProfile) -> AIRecipeResult:
+    """Make dose, step count, bloom, and total water exact without changing flavor choices."""
+    count = recommended_pour_count(profile)
+    pours = list(recipe.pours[:count])
+    while len(pours) < count:
+        pours.append(pours[-1].model_copy())
+    bloom_min, bloom_max = round(profile.dose * 2), round(profile.dose * 4)
+    bloom_volume = max(bloom_min, min(bloom_max, pours[0].volume))
+    remaining = profile.target_water - bloom_volume
+    base, extra = divmod(remaining, count - 1)
+    volumes = [bloom_volume] + [base + (1 if index < extra else 0) for index in range(count - 1)]
+    fitted = []
+    for index, (pour, volume) in enumerate(zip(pours, volumes)):
+        fitted.append(pour.model_copy(update={
+            "volume": volume,
+            "pauseAfter": max(15, min(45, pour.pauseAfter or 30)) if index == 0 else (0 if index == count - 1 else pour.pauseAfter),
+        }))
+    return recipe.model_copy(update={"dose": profile.dose, "pours": fitted})
+
+
+def recipe_quality_issues(recipe: AIRecipeResult, profile: BeanProfile) -> list[str]:
+    """Check the generated plan against practical pour-over fundamentals."""
+    issues: list[str] = []
+    total = sum(p.volume for p in recipe.pours)
+    if abs(total - profile.target_water) > 2:
+        issues.append(f"pour volumes total {total} ml instead of {profile.target_water} ml")
+    if abs(recipe.dose - profile.dose) > 0.1:
+        issues.append(f"dose changed from the requested {profile.dose} g to {recipe.dose} g")
+    expected_pours = recommended_pour_count(profile)
+    if len(recipe.pours) != expected_pours:
+        issues.append(f"this coffee profile calls for {expected_pours} pours, not {len(recipe.pours)}")
+    bloom = recipe.pours[0]
+    bloom_min, bloom_max = profile.dose * 2, profile.dose * 4
+    if not bloom_min <= bloom.volume <= bloom_max:
+        issues.append(f"bloom should be about 2-4x dose ({bloom_min:.0f}-{bloom_max:.0f} ml)")
+    if not 15 <= bloom.pauseAfter <= 45:
+        issues.append("the bloom pause should be 15-45 seconds")
+    estimated_seconds = sum(p.volume / p.flow + p.pauseAfter for p in recipe.pours)
+    if not 105 <= estimated_seconds <= 240:
+        issues.append(f"estimated brew program is {estimated_seconds:.0f}s; target roughly 105-240s")
+    return issues
 
 
 async def ask_gemini(prompt: str) -> AIRecipeResult:
@@ -224,18 +284,32 @@ AeroPress near 16, pour-over is 31-55, and French press/cold brew begins near 56
 You MUST choose a grind from 31 through 55. Use finer values within that range
 for more extraction and coarser values for less extraction.
 The sum of pour volumes should be close to target_water and never exceed 500 ml.
-Each individual pour is limited to 100 ml, so use additional pours when needed.
-Use 3, 4, or 5 pours. Choose the count deliberately from the bean, process,
-roast, dose, target water, and desired cup; do not default to three pours.
-Three favors a simpler/faster profile, four a balanced profile, and five finer
-control or higher extraction. Temperatures are Celsius. Flow is ml/s.
+Each individual pour is limited to 240 ml.
+Use 3, 4, or 5 pours. Choose three for medium/darker, chocolate/nutty,
+full-body or low-acidity goals; four for balanced, sweet or juicy profiles; and
+five for light washed, floral/tea-like, high-clarity or high-extraction goals.
+Do not default to one count. Temperatures are Celsius. Flow is ml/s.
 For iced coffee, describe only hot water delivered by the machine; account for ice by reducing target brew water.
 For cold style, use the lowest supported temperature and explain the compromise in rationale.
 Choose agitation conservatively. Keep the rationale concise and specific to the coffee.
+Before returning JSON, silently check the recipe like a specialty-coffee barista:
+- preserve the requested dose and make pours total the requested target water exactly;
+- use a bloom around 2-4 times the coffee dose with a 15-45 second rest;
+- keep the estimated water-delivery plus pauses roughly 1:45-4:00;
+- use an intentional coffee-to-water ratio, normally around 1:15-1:18;
+- ensure every choice forms one coherent recipe rather than a reusable template.
 
 Bean profile:
 {profile.model_dump_json(exclude_none=True)}"""
-    return await ask_gemini(prompt)
+    recipe = fit_recipe_to_profile(await ask_gemini(prompt), profile)
+    issues = recipe_quality_issues(recipe, profile)
+    if issues:
+        repair_prompt = prompt + "\n\nYour previous proposal failed these checks:\n- " + "\n- ".join(issues) + "\nReturn a corrected recipe and vary only what is needed."
+        recipe = fit_recipe_to_profile(await ask_gemini(repair_prompt), profile)
+        remaining = recipe_quality_issues(recipe, profile)
+        if remaining:
+            raise HTTPException(502, "AI recipe did not pass the brew-quality checks: " + "; ".join(remaining))
+    return recipe
 
 
 @app.post("/api/ai/enhance-recipe", response_model=AIRecipeResult)
@@ -243,7 +317,7 @@ async def enhance_ai_recipe(request: EnhanceRecipeRequest):
     prompt = f"""You are an expert specialty-coffee dial-in assistant for an xBloom Studio.
 Create an improved COPY of the recipe based on the user's taste feedback.
 Return only the requested JSON schema. Respect every numeric schema limit.
-Never exceed 500 ml total, 100 ml per pour, or 8 pours.
+Never exceed 500 ml total, 240 ml per pour, or 8 pours.
 This is pour-over: the xBloom grind MUST remain from 31 through 55.
 Choose 3, 4, or 5 pours deliberately. You may change the pour count when the
 taste feedback supports it; do not automatically return three pours.
@@ -258,7 +332,17 @@ Bean profile (may be absent):
 
 Rating: {request.rating or "Not provided"}/5
 Taste feedback: {request.feedback}"""
-    return await ask_gemini(prompt)
+    recipe = await ask_gemini(prompt)
+    if request.bean:
+        recipe = fit_recipe_to_profile(recipe, request.bean)
+        issues = recipe_quality_issues(recipe, request.bean)
+        if issues:
+            repair_prompt = prompt + "\n\nCorrect these brew-quality issues before returning JSON:\n- " + "\n- ".join(issues)
+            recipe = fit_recipe_to_profile(await ask_gemini(repair_prompt), request.bean)
+            remaining = recipe_quality_issues(recipe, request.bean)
+            if remaining:
+                raise HTTPException(502, "Improved recipe did not pass the brew-quality checks: " + "; ".join(remaining))
+    return recipe
 
 
 @app.get("/api/devices")
