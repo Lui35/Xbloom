@@ -83,6 +83,7 @@ class BeanProfile(BaseModel):
     variety: str | None = Field(default=None, max_length=100)
     process: str | None = Field(default=None, max_length=100)
     bean_size: str | None = Field(default=None, max_length=80)
+    acidity: int | None = Field(default=None, ge=1, le=5)
     process_detail: str | None = Field(default=None, max_length=200)
     infused_with: str | None = Field(default=None, max_length=150)
     altitude_masl: int | None = Field(default=None, ge=0, le=3000)
@@ -456,7 +457,13 @@ async def connect(request: ConnectRequest):
         return status_payload()
 
     for _ in range(2):
-        found = await discover_devices(timeout=6)
+        try:
+            found = await discover_devices(timeout=6)
+        except (FileNotFoundError, OSError) as error:
+            raise HTTPException(
+                503,
+                "Bluetooth is unavailable inside Docker Desktop. Run the API natively on Windows to connect to your xBloom machine.",
+            ) from error
         for device in found:
             if await attempt(device.address):
                 return status_payload()

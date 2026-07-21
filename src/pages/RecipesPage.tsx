@@ -1,4 +1,5 @@
-import { Plus, Save, Sparkles, Trash2, Waves } from "lucide-react";
+import { Droplets, Plus, Save, Snowflake, Sparkles, Sun, Trash2, Waves } from "lucide-react";
+import type { CSSProperties } from "react";
 import type { AppController } from "../controllers/useAppController";
 import type { Recipe } from "../domain/models";
 import { PatternGlyph } from "../components/PatternGlyph";
@@ -45,21 +46,28 @@ export function RecipesPage({ controller }: { controller: AppController }) {
         <div className="recipe-list">
           {recipes.map((r) => (
             <button
-              className={r.id === selected.id ? "selected" : ""}
+              className={`recipe-pick recipe-pick-${r.brewStyle} ${r.id === selected.id ? "selected" : ""}`}
               onClick={() => selectRecipe(r.id)}
               key={r.id}
+              style={{ "--recipe-accent": r.color } as CSSProperties}
             >
-              <span className="bean" style={{ background: r.color }} />
-              <span>
+              <span className="recipe-pick-icon">
+                {r.brewStyle === "iced" ? (
+                  <Snowflake />
+                ) : r.brewStyle === "cold" ? (
+                  <Droplets />
+                ) : (
+                  <Sun />
+                )}
+              </span>
+              <span className="recipe-pick-copy">
                 <strong>{r.name}</strong>
-                <small>
-                  {r.origin} ·{" "}
-                  {r.brewStyle === "iced"
-                    ? `Iced · ${r.iceGrams}g ice`
-                    : r.brewStyle === "cold"
-                      ? "Cold"
-                      : "Hot"}
-                </small>
+                <small>{r.origin || "Custom recipe"}</small>
+                <span className="recipe-pick-meta">
+                  <i>{r.pours.length} pours</i>
+                  <i>1:{Math.round(r.pours.reduce((sum, p) => sum + p.volume, 0) / r.dose)}</i>
+                  <i>Grind {r.grind}</i>
+                </span>
               </span>
             </button>
           ))}

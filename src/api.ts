@@ -23,6 +23,7 @@ export type AIBeanProfile = {
   variety?: string;
   process?: string;
   bean_size?: string;
+  acidity?: 1 | 2 | 3 | 4 | 5;
   process_detail?: string;
   /** Legacy field retained so previously saved beans can be migrated. */
   infused_with?: string;
@@ -68,7 +69,11 @@ async function call<T>(path: string, options?: RequestInit): Promise<T> {
     return response.json();
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError")
-      throw new Error("Gemini took too long to respond. Please try generating again.");
+      throw new Error("The xBloom API took too long to respond. Please try again.");
+    if (error instanceof TypeError)
+      throw new Error(
+        "The xBloom API is not running on port 8766. Start the native API for Bluetooth machine control.",
+      );
     throw error;
   } finally {
     window.clearTimeout(timeout);

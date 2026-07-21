@@ -50,6 +50,16 @@ export function BeansPage({ beans, openBeanEditor, openAI, saveBeans }: Props) {
                         <span key={String(value)}>{value}</span>
                       ))}
                   </div>
+                  {bean.acidity && (
+                    <div className="bean-acidity" aria-label={`Acidity ${bean.acidity} of 5`}>
+                      <small>Acidity</small>
+                      <span>
+                        {[1, 2, 3, 4, 5].map((level) => (
+                          <i key={level} className={level <= bean.acidity! ? "active" : ""} />
+                        ))}
+                      </span>
+                    </div>
+                  )}
                   {bean.tasting_notes && <blockquote>{bean.tasting_notes}</blockquote>}
                 </div>
                 <footer>

@@ -186,6 +186,160 @@ h1 em {
   cursor: pointer;
   font-size: 10px;
 }
+
+.acidity-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.acidity-field legend {
+  margin-bottom: 10px;
+  color: #a8aba3;
+  font-size: 12px;
+}
+.acidity-scale {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 58px;
+  padding: 8px 18px;
+  border: 1px solid #34372f;
+  border-radius: 12px;
+  background: #10120f;
+}
+.acidity-scale button {
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  width: 38px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #777b72;
+  cursor: pointer;
+}
+.acidity-scale button span {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #55594f;
+  border-radius: 50%;
+  transition: 160ms ease;
+}
+.acidity-scale button.active span {
+  border-color: #cadd5c;
+  background: #cadd5c;
+  box-shadow: 0 0 0 4px rgb(202 221 92 / 10%);
+}
+.acidity-scale button.active {
+  color: #dce6a4;
+}
+.acidity-field > p {
+  margin: 7px 0 0;
+  color: #8f9388;
+  font-size: 11px;
+}
+
+.recipe-list .recipe-pick {
+  --recipe-accent: #a8bb61;
+  position: relative;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 104px;
+  padding: 15px;
+  overflow: hidden;
+  border-color: color-mix(in srgb, var(--recipe-accent) 24%, #34372f);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--recipe-accent) 10%, #151713),
+    #10120f 66%
+  );
+}
+.recipe-list .recipe-pick::after {
+  content: "";
+  position: absolute;
+  inset: auto -22px -34px auto;
+  width: 92px;
+  height: 92px;
+  border: 1px solid color-mix(in srgb, var(--recipe-accent) 28%, transparent);
+  border-radius: 50%;
+}
+.recipe-list .recipe-pick.selected {
+  border-color: var(--recipe-accent);
+  box-shadow:
+    inset 3px 0 var(--recipe-accent),
+    0 0 0 1px color-mix(in srgb, var(--recipe-accent) 28%, transparent);
+}
+.recipe-pick-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--recipe-accent) 18%, #171a15);
+  color: var(--recipe-accent);
+}
+.recipe-pick-icon svg {
+  width: 21px;
+}
+.recipe-pick-copy {
+  min-width: 0;
+  text-align: left;
+}
+.recipe-list .recipe-pick-copy strong {
+  display: block;
+  overflow: hidden;
+  color: #f1f2ed;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipe-list .recipe-pick-copy > small {
+  display: block;
+  margin: 3px 0 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recipe-pick-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.recipe-pick-meta i {
+  padding: 4px 7px;
+  border: 1px solid #393d34;
+  border-radius: 20px;
+  color: #aeb2a8;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1;
+}
+
+.bean-acidity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+}
+.bean-acidity small {
+  color: #898d84;
+}
+.bean-acidity > span {
+  display: flex;
+  gap: 5px;
+}
+.bean-acidity i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid #54584f;
+  border-radius: 50%;
+}
+.bean-acidity i.active {
+  border-color: #cadd5c;
+  background: #cadd5c;
+}
 .device,
 .section-title button {
   border: 1px solid #34372f;
