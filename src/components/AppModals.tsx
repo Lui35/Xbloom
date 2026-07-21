@@ -145,28 +145,32 @@ export function AppModals({ controller }: { controller: AppController }) {
               <fieldset className="acidity-field">
                 <legend>Acidity</legend>
                 <div className="acidity-scale" role="radiogroup" aria-label="Acidity level">
-                  {[1, 2, 3, 4, 5].map((level) => (
-                    <button
-                      key={level}
-                      type="button"
-                      role="radio"
-                      aria-checked={(aiBean.acidity || 3) === level}
-                      className={(aiBean.acidity || 3) >= level ? "active" : ""}
-                      onClick={() => setAiBean({ ...aiBean, acidity: level as 1 | 2 | 3 | 4 | 5 })}
-                      title={`Acidity ${level} of 5`}
-                    >
-                      <span />
-                      <small>{level}</small>
-                    </button>
-                  ))}
+                  <span className="acidity-options">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <button
+                        key={level}
+                        type="button"
+                        role="radio"
+                        aria-checked={(aiBean.acidity || 3) === level}
+                        className={(aiBean.acidity || 3) >= level ? "active" : ""}
+                        onClick={() =>
+                          setAiBean({ ...aiBean, acidity: level as 1 | 2 | 3 | 4 | 5 })
+                        }
+                        title={`Acidity ${level} of 5`}
+                      >
+                        <span />
+                        <small>{level}</small>
+                      </button>
+                    ))}
+                  </span>
+                  <output>
+                    {
+                      (["", "Very low", "Low", "Balanced", "Bright", "Very bright"] as const)[
+                        aiBean.acidity || 3
+                      ]
+                    }
+                  </output>
                 </div>
-                <p>
-                  {
-                    (["", "Very low", "Low", "Balanced", "Bright", "Very bright"] as const)[
-                      aiBean.acidity || 3
-                    ]
-                  }
-                </p>
               </fieldset>
               <label>
                 {processDetail.label}
@@ -211,6 +215,14 @@ export function AppModals({ controller }: { controller: AppController }) {
                   <option>Medium-dark</option>
                   <option>Dark</option>
                 </select>
+              </label>
+              <label>
+                Roast date
+                <input
+                  type="date"
+                  value={aiBean.roast_date || ""}
+                  onChange={(e) => setAiBean({ ...aiBean, roast_date: e.target.value })}
+                />
               </label>
               <label className="wide">
                 Tasting notes

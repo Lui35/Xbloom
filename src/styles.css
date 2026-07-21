@@ -3107,6 +3107,131 @@ main {
   font-style: normal;
   line-height: 1;
 }
+
+/* Balanced bean editor controls */
+.ai-form .acidity-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-form .acidity-field legend {
+  margin: 0;
+  padding: 0;
+  color: #93998e;
+  font-size: 11px;
+}
+.ai-form .acidity-scale {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 13px;
+  border-color: #373b33;
+  border-radius: 9px;
+}
+.acidity-options {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.ai-form .acidity-scale button {
+  width: 30px;
+  gap: 2px;
+}
+.ai-form .acidity-scale button span {
+  width: 14px;
+  height: 14px;
+}
+.ai-form .acidity-scale button small {
+  color: inherit;
+  font-size: 9px;
+}
+.acidity-scale output {
+  min-width: 70px;
+  padding: 6px 9px;
+  border-radius: 15px;
+  background: #242a1d;
+  color: #d9e5a0;
+  font-size: 9px;
+  text-align: center;
+}
+.ai-form input[type="date"] {
+  color-scheme: dark;
+}
+
+/* Structured bean cards */
+.bean-library article {
+  min-height: 315px;
+  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-rows: 1fr auto;
+  column-gap: 17px;
+  row-gap: 20px;
+  padding: 22px;
+}
+.bean-card-mark {
+  width: 50px;
+  height: 50px;
+  border: 1px solid #38432b;
+  border-radius: 15px;
+}
+.bean-card-mark svg {
+  width: 21px;
+}
+.bean-card-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+.bean-card-heading {
+  min-width: 0;
+  padding-bottom: 11px;
+  border-bottom: 1px solid #2d312a;
+}
+.bean-library article .bean-card-heading h3 {
+  overflow: hidden;
+  margin: 5px 0 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bean-library article .bean-card-origin {
+  min-height: 17px;
+  margin: 10px 0 0;
+  line-height: 1.5;
+}
+.bean-library .bean-tags {
+  margin-top: 12px;
+}
+.bean-library .bean-acidity {
+  margin-top: 13px;
+}
+.bean-library .bean-acidity > small {
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.bean-library blockquote {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 14px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: #181b16;
+}
+.bean-library blockquote small {
+  color: #78866a;
+}
+.bean-library blockquote span {
+  overflow: hidden;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+}
+.bean-library article footer {
+  padding-top: 17px;
+  border-top: 1px solid #2d312a;
+}
 .pour-bars article {
   isolation: isolate;
 }

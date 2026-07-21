@@ -58,10 +58,12 @@ export function BeansPage({
                 <div className="bean-card-mark">
                   <Coffee />
                 </div>
-                <div>
-                  <small>{bean.roaster || "YOUR COFFEE"}</small>
-                  <h3>{bean.name}</h3>
-                  <p>
+                <div className="bean-card-content">
+                  <div className="bean-card-heading">
+                    <small>{bean.roaster || "YOUR COFFEE"}</small>
+                    <h3>{bean.name}</h3>
+                  </div>
+                  <p className="bean-card-origin">
                     {[bean.country, bean.region, bean.variety].filter(Boolean).join(" · ") ||
                       "Origin details not added"}
                   </p>
@@ -88,7 +90,12 @@ export function BeansPage({
                       </span>
                     </div>
                   )}
-                  {bean.tasting_notes && <blockquote>{bean.tasting_notes}</blockquote>}
+                  {bean.tasting_notes && (
+                    <blockquote>
+                      <small>CUP NOTES</small>
+                      <span>{bean.tasting_notes}</span>
+                    </blockquote>
+                  )}
                 </div>
                 <footer>
                   <button className="ai-button" onClick={() => openAI("create", bean)}>
