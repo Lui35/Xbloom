@@ -54,9 +54,16 @@ Use **Settings → Recipe and bean library** to export or import a JSON backup.
 Imports merge into the existing library and receive new local IDs, so they do
 not overwrite existing entries.
 
-On **Beans**, choose **Import package photo** to send a JPEG, PNG, or WebP label
-image to the configured Gemini model. Detected coffee details open in the bean
-editor for review before they are saved locally. Images are limited to 10 MB.
+On **Beans**, choose **Scan package** to send up to two JPEG, PNG, or WebP label
+images to the configured Gemini model. The processing card becomes a saved bean
+card when extraction finishes; low-confidence fields are marked for review.
+Images are limited to 10 MB each.
+
+The local API now persists beans, recipes, package photos, inventory, and brew
+history in SQLite (`xbloom.db` natively or `/app/data/xbloom.db` in Docker).
+Browser storage remains a startup/offline fallback and is migrated into SQLite
+the first time the upgraded app runs. Bean scans accept up to two photos (front
+then back), include per-field AI confidence, and save directly to the bean shelf.
 
 ## Bluetooth support
 

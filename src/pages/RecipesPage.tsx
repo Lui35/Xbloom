@@ -33,6 +33,7 @@ export function RecipesPage({ controller }: { controller: AppController }) {
     exportSelectedRecipe,
     importRecipe,
     recipeTransferMessage,
+    beans,
   } = controller;
   return (
     <section className="editor-page">
@@ -131,6 +132,27 @@ export function RecipesPage({ controller }: { controller: AppController }) {
                 value={selected.origin}
                 onChange={(e) => updateRecipe({ origin: e.target.value })}
               />
+            </label>
+            <label className="wide">
+              Bean used
+              <select
+                value={selected.beanId || ""}
+                onChange={(e) => {
+                  const beanId = e.target.value ? +e.target.value : undefined;
+                  const bean = beans.find((item) => item.id === beanId);
+                  updateRecipe({ beanId, bean });
+                }}
+              >
+                <option value="">Not linked to a saved bean</option>
+                {beans
+                  .filter((bean) => !bean.archived || bean.id === selected.beanId)
+                  .map((bean) => (
+                    <option value={bean.id} key={bean.id}>
+                      {bean.name} ·{" "}
+                      {Math.round(bean.remainingWeightGrams ?? bean.initialWeightGrams ?? 0)}g left
+                    </option>
+                  ))}
+              </select>
             </label>
             <label>
               Brew style

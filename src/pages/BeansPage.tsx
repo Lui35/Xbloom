@@ -1,18 +1,38 @@
-import { Coffee, ImageUp, LoaderCircle, Plus, Sparkles, Trash2 } from "lucide-react";
-import type { Bean } from "../domain/models";
+import { useMemo, useState } from "react";
+import {
+  Archive,
+  ArchiveRestore,
+  Coffee,
+  ImageUp,
+  LoaderCircle,
+  Plus,
+  Search,
+  Sparkles,
+} from "lucide-react";
+import type { Bean, Recipe } from "../domain/models";
 import { processDetailConfig } from "../domain/beanProcessing";
 
 type Props = {
   beans: Bean[];
+  recipes: Recipe[];
   openBeanEditor: (bean?: Bean) => void;
   openAI: (mode: "create" | "enhance", bean?: Bean) => void;
   saveBeans: (beans: Bean[]) => void;
-  importBeanPhoto: (file: File) => Promise<void>;
+  importBeanPhoto: (files: File[], bagWeight?: number) => Promise<void>;
   beanPhotoLoading: boolean;
   beanPhotoError: string;
 };
+
+function roastAge(bean: Bean) {
+  if (!bean.roast_date) return null;
+  const timestamp = new Date(`${bean.roast_date}T12:00:00`).getTime();
+  if (!Number.isFinite(timestamp)) return null;
+  return Math.max(0, Math.floor((Date.now() - timestamp) / 86_400_000));
+}
+
 export function BeansPage({
   beans,
+  recipes,
   openBeanEditor,
   openAI,
   saveBeans,
@@ -20,25 +40,60 @@ export function BeansPage({
   beanPhotoLoading,
   beanPhotoError,
 }: Props) {
+  const [query, setQuery] = useState("");
+  const [processFilter, setProcessFilter] = useState("All");
+  const [showArchived, setShowArchived] = useState(false);
+  const [scanWeight, setScanWeight] = useState(250);
+  const processes = useMemo(
+    () => ["All", ...new Set(beans.map((bean) => bean.process).filter(Boolean) as string[])],
+    [beans],
+  );
+  const visibleBeans = beans.filter((bean) => {
+    if (Boolean(bean.archived) !== showArchived) return false;
+    if (processFilter !== "All" && bean.process !== processFilter) return false;
+    const text = [
+      bean.name,
+      bean.roaster,
+      bean.country,
+      bean.region,
+      bean.process,
+      bean.tasting_notes,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return text.includes(query.trim().toLowerCase());
+  });
   return (
     <section className="editor-page beans-page">
       <div className="page-heading">
         <div>
           <p className="eyebrow">MY COFFEE</p>
           <h2>Beans</h2>
-          <p>Save a coffee once, then reuse its details in every AI recipe.</p>
+          <p>Track every bag from package scan to its final brew.</p>
         </div>
         <div className="bean-page-actions">
+          <select
+            className="bag-size-select"
+            value={scanWeight}
+            onChange={(event) => setScanWeight(+event.target.value)}
+            aria-label="Package weight"
+          >
+            <option value={250}>250g bag</option>
+            <option value={500}>500g bag</option>
+            <option value={1000}>1kg bag</option>
+          </select>
           <label className={`photo-import ${beanPhotoLoading ? "loading" : ""}`}>
             {beanPhotoLoading ? <LoaderCircle /> : <ImageUp />}
-            {beanPhotoLoading ? "Reading package…" : "Import package photo"}
+            {beanPhotoLoading ? "Reading package…" : "Scan package"}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp"
+              multiple
               disabled={beanPhotoLoading}
               onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) void importBeanPhoto(file);
+                const files = Array.from(event.target.files || []).slice(0, 2);
+                if (files.length) void importBeanPhoto(files, scanWeight);
                 event.target.value = "";
               }}
             />
@@ -48,10 +103,34 @@ export function BeansPage({
           </button>
         </div>
       </div>
+      <p className="package-scan-hint">
+        For the best result, select the front photo first and the back photo second.
+      </p>
+      <div className="bean-toolbar">
+        <label>
+          <Search />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search origin, roaster, process, or tasting note"
+          />
+        </label>
+        <select value={processFilter} onChange={(event) => setProcessFilter(event.target.value)}>
+          {processes.map((process) => (
+            <option key={process}>{process}</option>
+          ))}
+        </select>
+        <button
+          className={showArchived ? "active" : ""}
+          onClick={() => setShowArchived(!showArchived)}
+        >
+          <Archive size={15} /> {showArchived ? "Archived bags" : "View archive"}
+        </button>
+      </div>
       {beanPhotoError && <p className="bean-photo-error">{beanPhotoError}</p>}
-      {beans.length || beanPhotoLoading ? (
+      {visibleBeans.length || beanPhotoLoading ? (
         <div className="bean-library">
-          {beanPhotoLoading && (
+          {beanPhotoLoading && !showArchived && (
             <article className="bean-processing-card" aria-live="polite">
               <div className="bean-scan-visual">
                 <Coffee />
@@ -61,29 +140,52 @@ export function BeansPage({
                 <p className="eyebrow">AI LABEL SCAN</p>
                 <h3>Building your bean profile</h3>
                 <ul>
-                  <li>Reading the package</li>
+                  <li>Reading front and back labels</li>
                   <li>Finding origin and process</li>
-                  <li>Organizing tasting details</li>
+                  <li>Checking extraction confidence</li>
                 </ul>
               </div>
             </article>
           )}
-          {beans.map((bean) => {
+          {visibleBeans.map((bean) => {
             const detail = bean.process_detail || bean.infused_with;
+            const age = roastAge(bean);
+            const linkedRecipes = recipes.filter((recipe) => recipe.beanId === bean.id);
+            const typicalDose = linkedRecipes[0]?.dose || 18;
+            const initial = bean.initialWeightGrams || 250;
+            const remaining = Math.max(0, bean.remainingWeightGrams ?? initial);
+            const percent = Math.min(100, (remaining / initial) * 100);
+            const uncertain = Object.entries(bean.aiConfidence || {}).filter(
+              ([, score]) => score < 0.75,
+            );
             return (
-              <article key={bean.id}>
+              <article key={bean.id} className={age !== null && age > 45 ? "bean-aging" : ""}>
                 <div className="bean-card-mark">
-                  <Coffee />
+                  {bean.packagePhotos?.front ? (
+                    <img src={bean.packagePhotos.front} alt="Coffee package" />
+                  ) : (
+                    <Coffee />
+                  )}
                 </div>
                 <div className="bean-card-content">
                   <div className="bean-card-heading">
                     <small>{bean.roaster || "YOUR COFFEE"}</small>
                     <h3>{bean.name}</h3>
+                    {age !== null && (
+                      <span className={age > 45 ? "roast-age warning" : "roast-age"}>
+                        {age === 0 ? "Roasted today" : `${age} days from roast`}
+                      </span>
+                    )}
                   </div>
                   <p className="bean-card-origin">
                     {[bean.country, bean.region, bean.variety].filter(Boolean).join(" · ") ||
                       "Origin details not added"}
                   </p>
+                  {uncertain.length > 0 && (
+                    <p className="confidence-warning">
+                      Check: {uncertain.map(([field]) => field.replaceAll("_", " ")).join(", ")}
+                    </p>
+                  )}
                   <div className="bean-tags">
                     {[
                       bean.process,
@@ -96,6 +198,15 @@ export function BeansPage({
                       .map((value) => (
                         <span key={String(value)}>{value}</span>
                       ))}
+                  </div>
+                  <div className="bean-inventory">
+                    <span>
+                      <b>{remaining.toFixed(0)}g</b> of {initial}g
+                    </span>
+                    <span>{Math.floor(remaining / typicalDose)} brews left</span>
+                    <i>
+                      <em style={{ width: `${percent}%` }} />
+                    </i>
                   </div>
                   {bean.acidity && (
                     <div className="bean-acidity" aria-label={`Acidity ${bean.acidity} of 5`}>
@@ -113,24 +224,46 @@ export function BeansPage({
                       <span>{bean.tasting_notes}</span>
                     </blockquote>
                   )}
+                  {linkedRecipes.length > 0 && (
+                    <details className="bean-recipes">
+                      <summary>
+                        {linkedRecipes.length} linked recipe{linkedRecipes.length === 1 ? "" : "s"}
+                      </summary>
+                      <div>
+                        {linkedRecipes.map((recipe) => (
+                          <span key={recipe.id}>
+                            <b>{recipe.name}</b>
+                            <small>
+                              {recipe.ratio} · Grind {recipe.grind} · {recipe.pours.length} pours
+                            </small>
+                          </span>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
                 <footer>
-                  <button className="ai-button" onClick={() => openAI("create", bean)}>
-                    <Sparkles size={16} /> Create recipe with AI
-                  </button>
+                  {!bean.archived && (
+                    <button className="ai-button" onClick={() => openAI("create", bean)}>
+                      <Sparkles size={16} /> Create recipe with AI
+                    </button>
+                  )}
                   <span className="bean-card-actions">
                     <button className="ai-secondary" onClick={() => openBeanEditor(bean)}>
                       Edit
                     </button>
                     <button
-                      className="bean-delete"
-                      aria-label={`Remove ${bean.name}`}
-                      onClick={() => {
-                        if (window.confirm(`Remove “${bean.name}” from My Beans?`))
-                          saveBeans(beans.filter((b) => b.id !== bean.id));
-                      }}
+                      className="bean-archive"
+                      onClick={() =>
+                        saveBeans(
+                          beans.map((item) =>
+                            item.id === bean.id ? { ...item, archived: !item.archived } : item,
+                          ),
+                        )
+                      }
                     >
-                      <Trash2 size={16} />
+                      {bean.archived ? <ArchiveRestore /> : <Archive />}
+                      {bean.archived ? "Restore" : "Archive"}
                     </button>
                   </span>
                 </footer>
@@ -141,14 +274,23 @@ export function BeansPage({
       ) : (
         <div className="empty-beans">
           <Coffee size={42} />
-          <h3>Your bean shelf is empty</h3>
+          <h3>
+            {showArchived
+              ? "No archived bags"
+              : query
+                ? "No matching coffee"
+                : "Your bean shelf is empty"}
+          </h3>
           <p>
-            Add your first coffee and Gemini can reuse its origin, process, bean size, infusion,
-            variety, and tasting notes.
+            {showArchived
+              ? "Finished bags can be archived from their card."
+              : "Add a bag manually or scan its front and back labels with AI."}
           </p>
-          <button className="ai-button" onClick={() => openBeanEditor()}>
-            <Plus size={17} /> Add your first bean
-          </button>
+          {!showArchived && !query && (
+            <button className="ai-button" onClick={() => openBeanEditor()}>
+              <Plus size={17} /> Add your first bean
+            </button>
+          )}
         </div>
       )}
     </section>

@@ -17,9 +17,9 @@ function App() {
     waterAlert,
     setWaterAlert,
     beans,
+    recipes,
     machineName,
     brewing,
-    history,
     nav,
     setNav,
     navItems,
@@ -119,6 +119,7 @@ function App() {
         {nav === "Beans" && (
           <BeansPage
             beans={beans}
+            recipes={recipes}
             openBeanEditor={openBeanEditor}
             openAI={openAI}
             saveBeans={saveBeans}
@@ -128,7 +129,7 @@ function App() {
           />
         )}
         {nav === "Settings" && <SettingsPage controller={controller} />}
-        {nav === "History" && <HistoryPage history={history} />}
+        {nav === "History" && <HistoryPage controller={controller} />}
 
         {nav === "Brew" && <BrewPage controller={controller} />}
         <HomePage controller={controller} />

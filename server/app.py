@@ -2,8 +2,9 @@ import asyncio
 import json
 import math
 import os
+import sqlite3
 import sys
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from typing import Any, Literal
 
@@ -27,6 +28,32 @@ from xbloom.models.types import CupType, PourPattern, PourStep, VibrationPattern
 from xbloom.scanner import discover_devices
 
 DEVICE_CACHE_FILE = Path(os.getenv("XBLOOM_DEVICE_CACHE", PROJECT_ROOT / ".xbloom-device.json"))
+DATABASE_FILE = Path(os.getenv("XBLOOM_DATABASE", PROJECT_ROOT / "xbloom.db"))
+
+
+def initialize_database() -> None:
+    DATABASE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(DATABASE_FILE)) as database:
+        database.execute(
+            "CREATE TABLE IF NOT EXISTS app_data (collection TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        database.commit()
+
+
+def read_collection(name: str) -> list[Any]:
+    with closing(sqlite3.connect(DATABASE_FILE)) as database:
+        row = database.execute("SELECT payload FROM app_data WHERE collection = ?", (name,)).fetchone()
+    return json.loads(row[0]) if row else []
+
+
+def write_collection(name: str, value: list[Any]) -> None:
+    with closing(sqlite3.connect(DATABASE_FILE)) as database:
+        database.execute(
+            "INSERT INTO app_data(collection, payload, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP) "
+            "ON CONFLICT(collection) DO UPDATE SET payload=excluded.payload, updated_at=CURRENT_TIMESTAMP",
+            (name, json.dumps(value)),
+        )
+        database.commit()
 
 
 def load_cached_address() -> str | None:
@@ -122,8 +149,7 @@ class EnhanceRecipeRequest(BaseModel):
 
 
 class BeanPhotoRequest(BaseModel):
-    image_base64: str = Field(min_length=20, max_length=16_000_000)
-    mime_type: Literal["image/jpeg", "image/png", "image/webp"]
+    images: list[dict[str, str]] = Field(min_length=1, max_length=2)
 
 
 class BeanPhotoResult(BaseModel):
@@ -142,6 +168,13 @@ class BeanPhotoResult(BaseModel):
     roast_level: str | None = Field(default=None, max_length=50)
     roast_date: str | None = Field(default=None, max_length=30)
     tasting_notes: str | None = Field(default=None, max_length=300)
+    confidence: dict[str, float] = Field(default_factory=dict)
+
+
+class AppDataPayload(BaseModel):
+    beans: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    recipes: list[dict[str, Any]] = Field(default_factory=list, max_length=1000)
+    history: list[dict[str, Any]] = Field(default_factory=list, max_length=5000)
 
 
 def normalize_ai_recipe(raw: str) -> dict[str, Any]:
@@ -333,11 +366,15 @@ Do not guess missing values. Use null when a field is absent or uncertain.
 For name, use the coffee/product name, not the roaster name. Preserve named
 varieties and processing terms. Put co-fermentation, infusion, honey type, or
 decaffeination details in process_detail. Convert a printed acidity rating to a
-1-5 scale only when the label provides enough evidence. Return only JSON."""
+1-5 scale only when the label provides enough evidence. Add a 0-1 confidence
+score for every non-null extracted field in confidence. Return only JSON."""
     body = {
         "contents": [{"role": "user", "parts": [
             {"text": prompt},
-            {"inlineData": {"mimeType": request.mime_type, "data": request.image_base64}},
+            *[
+                {"inlineData": {"mimeType": image["mime_type"], "data": image["image_base64"]}}
+                for image in request.images
+            ],
         ]}],
         "generationConfig": {
             "temperature": 0.1,
@@ -387,6 +424,7 @@ def status_payload():
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    initialize_database()
     yield
     if client and client.is_connected:
         client._cleanup_on_disconnect = False
@@ -400,6 +438,23 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://127.0.0.1:5173", "http
 @app.get("/api/health")
 async def health():
     return {"ok": True, "pybloom": str(PYBLOOM_SRC), "aiConfigured": bool(os.getenv("GEMINI_API_KEY"))}
+
+
+@app.get("/api/data", response_model=AppDataPayload)
+async def get_app_data():
+    return AppDataPayload(
+        beans=read_collection("beans"),
+        recipes=read_collection("recipes"),
+        history=read_collection("history"),
+    )
+
+
+@app.put("/api/data")
+async def save_app_data(payload: AppDataPayload):
+    write_collection("beans", payload.beans)
+    write_collection("recipes", payload.recipes)
+    write_collection("history", payload.history)
+    return {"saved": True}
 
 
 @app.post("/api/ai/generate-recipe", response_model=AIRecipeResult)

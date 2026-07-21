@@ -29,6 +29,22 @@ export function AppModals({ controller }: { controller: AppController }) {
     saveAIRecipe,
   } = controller;
   const processDetail = processDetailConfig(aiBean.process);
+  const uncertain = (field: string) =>
+    aiBean.aiConfidence?.[field] !== undefined && aiBean.aiConfidence[field] < 0.75
+      ? "field-uncertain"
+      : "";
+  async function attachPackagePhoto(file: File, side: "front" | "back") {
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("The image could not be opened."));
+      reader.readAsDataURL(file);
+    });
+    setAiBean({
+      ...aiBean,
+      packagePhotos: { ...aiBean.packagePhotos, [side]: dataUrl },
+    });
+  }
   return (
     <>
       {beanEditor && (
@@ -67,7 +83,7 @@ export function AppModals({ controller }: { controller: AppController }) {
                   onChange={(e) => setAiBean({ ...aiBean, roaster: e.target.value })}
                 />
               </label>
-              <label>
+              <label className={uncertain("country")}>
                 Country
                 <input
                   placeholder="e.g. Colombia"
@@ -75,7 +91,7 @@ export function AppModals({ controller }: { controller: AppController }) {
                   onChange={(e) => setAiBean({ ...aiBean, country: e.target.value })}
                 />
               </label>
-              <label>
+              <label className={uncertain("region")}>
                 Region
                 <input
                   placeholder="e.g. Huila"
@@ -83,7 +99,7 @@ export function AppModals({ controller }: { controller: AppController }) {
                   onChange={(e) => setAiBean({ ...aiBean, region: e.target.value })}
                 />
               </label>
-              <label>
+              <label className={uncertain("producer")}>
                 Producer / farm
                 <input
                   value={aiBean.producer || ""}
@@ -102,7 +118,7 @@ export function AppModals({ controller }: { controller: AppController }) {
                   <option>Liberica</option>
                 </select>
               </label>
-              <label>
+              <label className={uncertain("variety")}>
                 Variety
                 <input
                   placeholder="e.g. Pink Bourbon"
@@ -110,7 +126,7 @@ export function AppModals({ controller }: { controller: AppController }) {
                   onChange={(e) => setAiBean({ ...aiBean, variety: e.target.value })}
                 />
               </label>
-              <label>
+              <label className={uncertain("process")}>
                 Process
                 <select
                   value={aiBean.process || ""}
@@ -232,6 +248,78 @@ export function AppModals({ controller }: { controller: AppController }) {
                   onChange={(e) => setAiBean({ ...aiBean, roast_date: e.target.value })}
                 />
               </label>
+              <label>
+                Purchased weight
+                <select
+                  value={
+                    [250, 500, 1000].includes(aiBean.initialWeightGrams || 0)
+                      ? aiBean.initialWeightGrams
+                      : "custom"
+                  }
+                  onChange={(e) => {
+                    const weight = e.target.value === "custom" ? 0 : +e.target.value;
+                    setAiBean({
+                      ...aiBean,
+                      initialWeightGrams: weight,
+                      remainingWeightGrams: weight,
+                    });
+                  }}
+                >
+                  <option value={250}>250g · quarter kilo</option>
+                  <option value={500}>500g · half kilo</option>
+                  <option value={1000}>1kg</option>
+                  <option value="custom">Custom amount</option>
+                </select>
+                {![250, 500, 1000].includes(aiBean.initialWeightGrams || 0) && (
+                  <input
+                    type="number"
+                    min="1"
+                    max="10000"
+                    placeholder="Custom grams"
+                    value={aiBean.initialWeightGrams || ""}
+                    onChange={(e) => {
+                      const weight = Math.max(0, +e.target.value);
+                      setAiBean({
+                        ...aiBean,
+                        initialWeightGrams: weight,
+                        remainingWeightGrams: weight,
+                      });
+                    }}
+                  />
+                )}
+              </label>
+              <label>
+                Remaining beans (g)
+                <input
+                  type="number"
+                  min="0"
+                  max="10000"
+                  value={aiBean.remainingWeightGrams ?? aiBean.initialWeightGrams ?? 250}
+                  onChange={(e) =>
+                    setAiBean({ ...aiBean, remainingWeightGrams: Math.max(0, +e.target.value) })
+                  }
+                />
+              </label>
+              <div className="package-photo-fields wide">
+                {(["front", "back"] as const).map((side) => (
+                  <label key={side}>
+                    <span>{side === "front" ? "Front package photo" : "Back package photo"}</span>
+                    {aiBean.packagePhotos?.[side] ? (
+                      <img src={aiBean.packagePhotos[side]} alt={`${side} coffee package`} />
+                    ) : (
+                      <span className="photo-placeholder">Add photo</span>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void attachPackagePhoto(file, side);
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
               <label className="wide">
                 Tasting notes
                 <input
@@ -279,11 +367,13 @@ export function AppModals({ controller }: { controller: AppController }) {
                   value={selectedBeanId || ""}
                   onChange={(e) => selectBeanForAI(+e.target.value)}
                 >
-                  {beans.map((bean) => (
-                    <option value={bean.id} key={bean.id}>
-                      {bean.name}
-                    </option>
-                  ))}
+                  {beans
+                    .filter((bean) => !bean.archived || bean.id === selectedBeanId)
+                    .map((bean) => (
+                      <option value={bean.id} key={bean.id}>
+                        {bean.name}
+                      </option>
+                    ))}
                 </select>
               </label>
               {selectedBeanId && (
@@ -337,6 +427,11 @@ export function AppModals({ controller }: { controller: AppController }) {
                     value={aiFeedback}
                     onChange={(e) => setAiFeedback(e.target.value)}
                   />
+                  <span className="taste-guidance">
+                    Describe acidity, bitterness, sweetness, body, clarity, strength, and finish.
+                    Example: “Bright and a little sour, tea-like body, short finish; I want more
+                    sweetness and roundness.”
+                  </span>
                 </label>
                 <label>
                   Overall rating

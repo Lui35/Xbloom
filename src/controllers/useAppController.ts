@@ -67,6 +67,7 @@ export function useAppController() {
   const [beanPhotoError, setBeanPhotoError] = useState("");
   const [libraryMessage, setLibraryMessage] = useState("");
   const [recipeTransferMessage, setRecipeTransferMessage] = useState("");
+  const [dataHydrated, setDataHydrated] = useState(false);
   const [selectedId, setSelectedId] = useState(1);
   const selected = recipes.find((r) => r.id === selectedId) || recipes[0];
   const [machineName, setMachineName] = useState(
@@ -102,6 +103,35 @@ export function useAppController() {
     ],
     [],
   );
+
+  useEffect(() => {
+    let active = true;
+    void xbloomApi
+      .loadData()
+      .then((data) => {
+        if (!active) return;
+        if (data.beans.length) setBeans(data.beans as Bean[]);
+        if (data.recipes.length) {
+          const loaded = data.recipes as Recipe[];
+          setRecipes(loaded);
+          savedRecipes.current = structuredClone(loaded);
+          setSelectedId(loaded[0].id);
+        }
+        if (data.history.length) setHistory(data.history as BrewRecord[]);
+        setDataHydrated(true);
+      })
+      .catch(() => setDataHydrated(true));
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!dataHydrated) return;
+    const timer = window.setTimeout(() => {
+      void xbloomApi.saveData({ beans, recipes: savedRecipes.current, history });
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [beans, recipes, history, dataHydrated]);
 
   function setNav(next: string) {
     if (nav === "Recipes" && next !== "Recipes" && recipeDirty) {
@@ -206,6 +236,9 @@ export function useAppController() {
     const record: BrewRecord = {
       id: Date.now(),
       recipeName: selected.name,
+      recipeId: selected.id,
+      beanId: selected.beanId,
+      beanName: beans.find((bean) => bean.id === selected.beanId)?.name,
       completedAt: new Date().toISOString(),
       duration: elapsed,
       water: last?.water || 0,
@@ -217,7 +250,28 @@ export function useAppController() {
       localStorage.setItem("xbloom-history", JSON.stringify(next));
       return next;
     });
-  }, [brewComplete, elapsed, samples, selected.name, selected.pours.length]);
+    if (selected.beanId) {
+      setBeans((current) => {
+        const next = current.map((bean) =>
+          bean.id === selected.beanId
+            ? {
+                ...bean,
+                remainingWeightGrams: Math.max(
+                  0,
+                  (bean.remainingWeightGrams ?? bean.initialWeightGrams ?? 0) - selected.dose,
+                ),
+              }
+            : bean,
+        );
+        try {
+          localStorage.setItem("xbloom-beans", JSON.stringify(next));
+        } catch {
+          /* Photos may exceed browser storage; SQLite remains authoritative. */
+        }
+        return next;
+      });
+    }
+  }, [brewComplete, elapsed, samples, selected, beans]);
 
   function updateRecipe(patch: Partial<Recipe>) {
     setRecipeDirty(true);
@@ -230,7 +284,11 @@ export function useAppController() {
   }
   function saveBeans(next: Bean[]) {
     setBeans(next);
-    localStorage.setItem("xbloom-beans", JSON.stringify(next));
+    try {
+      localStorage.setItem("xbloom-beans", JSON.stringify(next));
+    } catch {
+      /* Package photos are persisted in SQLite when browser storage is full. */
+    }
   }
   function selectBeanForAI(id: number) {
     const bean = beans.find((b) => b.id === id);
@@ -259,33 +317,47 @@ export function useAppController() {
     saveCurrentBean();
     setBeanEditor(false);
   }
-  async function importBeanPhoto(file: File) {
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+  async function importBeanPhoto(files: File[], bagWeight = 250) {
+    if (
+      !files.length ||
+      files.some((file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type))
+    ) {
       setBeanPhotoError("Choose a JPEG, PNG, or WebP image.");
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setBeanPhotoError("The image must be smaller than 10 MB.");
+    if (files.some((file) => file.size > 10 * 1024 * 1024)) {
+      setBeanPhotoError("Each image must be smaller than 10 MB.");
       return;
     }
     setBeanPhotoLoading(true);
     setBeanPhotoError("");
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result));
-        reader.onerror = () => reject(new Error("The image could not be opened."));
-        reader.readAsDataURL(file);
-      });
+      const dataUrls = await Promise.all(
+        files.slice(0, 2).map(
+          (file) =>
+            new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result));
+              reader.onerror = () => reject(new Error("An image could not be opened."));
+              reader.readAsDataURL(file);
+            }),
+        ),
+      );
       const scanned = await xbloomApi.importBeanPhoto({
-        image_base64: dataUrl.split(",", 2)[1],
-        mime_type: file.type,
+        images: dataUrls.map((dataUrl, index) => ({
+          image_base64: dataUrl.split(",", 2)[1],
+          mime_type: files[index].type,
+        })),
       });
       const importedBean: Bean = {
         ...blankBean(),
         ...scanned,
         id: Date.now(),
-        name: scanned.name || file.name.replace(/\.[^.]+$/, ""),
+        name: scanned.name || files[0].name.replace(/\.[^.]+$/, ""),
+        packagePhotos: { front: dataUrls[0], back: dataUrls[1] },
+        aiConfidence: scanned.confidence,
+        initialWeightGrams: bagWeight,
+        remainingWeightGrams: bagWeight,
       };
       saveBeans([...beans, importedBean]);
       setAiBean(importedBean);
@@ -408,6 +480,22 @@ export function useAppController() {
       setNav("Beans");
       setConnectionError("Add a bean first, then create an AI recipe from its card.");
     }
+  }
+  function enhanceFromHistory(record: BrewRecord) {
+    const recipe = recipes.find((item) => item.id === record.recipeId);
+    if (!recipe) {
+      setConnectionError("The recipe used for this older brew is no longer available.");
+      return;
+    }
+    const bean = beans.find((item) => item.id === record.beanId || item.id === recipe.beanId);
+    setSelectedId(recipe.id);
+    setAiBean(bean ? { ...bean } : { ...blankBean(), ...(recipe.bean || {}) });
+    setSelectedBeanId(bean?.id || null);
+    setAiResult(null);
+    setAiError("");
+    setAiFeedback("");
+    setAiRating(4);
+    setAiMode("enhance");
   }
   async function runAI() {
     setAiLoading(true);
@@ -770,6 +858,7 @@ export function useAppController() {
     importLibrary,
     exportSelectedRecipe,
     importRecipe,
+    enhanceFromHistory,
     openAI,
     runAI,
     saveAIRecipe,

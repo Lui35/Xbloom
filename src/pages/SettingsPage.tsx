@@ -36,6 +36,15 @@ export function SettingsPage({ controller }: { controller: AppController }) {
         </div>
         <div className="setting-row">
           <div>
+            <strong>SQLite library</strong>
+            <small>
+              Beans, recipes, photos, inventory, and history persist in a local database.
+            </small>
+          </div>
+          <span className="safe-pill">Enabled</span>
+        </div>
+        <div className="setting-row">
+          <div>
             <strong>Disconnect protection</strong>
             <small>Disconnecting will not abort an active machine operation.</small>
           </div>

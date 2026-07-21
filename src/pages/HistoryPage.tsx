@@ -1,8 +1,9 @@
-import { Coffee, History } from "lucide-react";
-import type { BrewRecord } from "../domain/models";
+import { Coffee, History, Sparkles } from "lucide-react";
+import type { AppController } from "../controllers/useAppController";
 import { formatTime } from "../domain/brewing";
 
-export function HistoryPage({ history }: { history: BrewRecord[] }) {
+export function HistoryPage({ controller }: { controller: AppController }) {
+  const { history, enhanceFromHistory } = controller;
   return (
     <section className="editor-page">
       <div className="page-heading">
@@ -27,12 +28,18 @@ export function HistoryPage({ history }: { history: BrewRecord[] }) {
               <div>
                 <strong>{record.recipeName}</strong>
                 <small>
+                  {record.beanName ? `${record.beanName} · ` : ""}
                   {new Date(record.completedAt).toLocaleString()} · {record.steps} steps
                 </small>
               </div>
               <b>{formatTime(record.duration)}</b>
               <span>{record.water.toFixed(0)} ml</span>
               <span>{record.coffee.toFixed(1)} g</span>
+              {record.recipeId && (
+                <button onClick={() => enhanceFromHistory(record)}>
+                  <Sparkles /> Enhance experience
+                </button>
+              )}
             </article>
           ))}
         </div>

@@ -36,11 +36,23 @@ export type Recipe = {
   pours: Pour[];
 };
 
-export type Bean = AIBeanProfile & { id: number; name: string; roaster?: string };
+export type Bean = AIBeanProfile & {
+  id: number;
+  name: string;
+  roaster?: string;
+  packagePhotos?: { front?: string; back?: string };
+  aiConfidence?: Record<string, number>;
+  initialWeightGrams?: number;
+  remainingWeightGrams?: number;
+  archived?: boolean;
+};
 export type BrewSample = { time: number; water: number; coffee: number };
 export type BrewRecord = {
   id: number;
   recipeName: string;
+  recipeId?: number;
+  beanId?: number;
+  beanName?: string;
   completedAt: string;
   duration: number;
   water: number;

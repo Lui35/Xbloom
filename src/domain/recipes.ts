@@ -19,6 +19,9 @@ export const blankBean = (): Bean => ({
   roast_level: "Medium-light",
   tasting_notes: "",
   desired_cup: "",
+  initialWeightGrams: 250,
+  remainingWeightGrams: 250,
+  archived: false,
 });
 
 export const initialRecipes: Recipe[] = [

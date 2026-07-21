@@ -54,6 +54,7 @@ export type AIRecipeResult = {
 export type AIBeanPhotoResult = Omit<AIBeanProfile, "brew_style" | "brewer" | "cups"> & {
   name: string;
   roaster?: string;
+  confidence: Record<string, number>;
 };
 const API = "http://127.0.0.1:8766/api";
 
@@ -102,9 +103,12 @@ export const xbloomApi = {
     rating?: number;
   }) =>
     call<AIRecipeResult>("/ai/enhance-recipe", { method: "POST", body: JSON.stringify(payload) }),
-  importBeanPhoto: (payload: { image_base64: string; mime_type: string }) =>
+  importBeanPhoto: (payload: { images: Array<{ image_base64: string; mime_type: string }> }) =>
     call<AIBeanPhotoResult>("/ai/import-bean-photo", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  loadData: () => call<{ beans: unknown[]; recipes: unknown[]; history: unknown[] }>("/data"),
+  saveData: (payload: { beans: unknown[]; recipes: unknown[]; history: unknown[] }) =>
+    call<{ saved: boolean }>("/data", { method: "PUT", body: JSON.stringify(payload) }),
 };
