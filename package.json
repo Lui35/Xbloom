@@ -1,0 +1,56 @@
+{
+  "name": "xbloom-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A calm desktop companion for xBloom coffee machines.",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:web": "vite --host 127.0.0.1",
+    "dev:api": "..\\PyBloom\\.venv\\Scripts\\python.exe -m uvicorn server.app:app --host 127.0.0.1 --port 8766 --reload",
+    "dev:desktop": "concurrently -k \"npm:dev:api\" \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "start": "electron .",
+    "package": "npm run build && electron-builder"
+  },
+  "build": {
+    "appId": "coffee.xbloom.desktop",
+    "productName": "xBloom Desktop",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@types/web-bluetooth": "^0.0.21",
+    "concurrently": "latest",
+    "electron": "latest",
+    "electron-builder": "latest",
+    "typescript": "latest",
+    "wait-on": "latest"
+  }
+}
