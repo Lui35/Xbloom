@@ -3422,6 +3422,124 @@ main {
 .ai-stage-list span.done svg {
   color: #8da64a;
 }
+
+/* Dialog motion system */
+.ai-modal-backdrop {
+  animation: modal-backdrop-in 220ms ease-out both;
+}
+.ai-modal {
+  transform-origin: 50% 42%;
+  animation: modal-surface-in 360ms cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}
+.ai-modal > header > div,
+.ai-modal > header > button {
+  animation: modal-content-in 330ms 90ms ease-out both;
+}
+.ai-modal > .ai-form,
+.ai-modal > .ai-bean-picker,
+.ai-modal > .ai-feedback,
+.ai-modal > .ai-preview,
+.ai-modal > .ai-generating,
+.ai-modal > .ai-error {
+  animation: modal-content-in 360ms 120ms ease-out both;
+}
+.ai-modal > footer {
+  animation: modal-content-in 330ms 170ms ease-out both;
+}
+.bean-editor .ai-form > label,
+.bean-editor .ai-form > fieldset {
+  animation: modal-field-in 300ms ease-out both;
+}
+.bean-editor .ai-form > :nth-child(1),
+.bean-editor .ai-form > :nth-child(2) {
+  animation-delay: 110ms;
+}
+.bean-editor .ai-form > :nth-child(3),
+.bean-editor .ai-form > :nth-child(4) {
+  animation-delay: 135ms;
+}
+.bean-editor .ai-form > :nth-child(5),
+.bean-editor .ai-form > :nth-child(6) {
+  animation-delay: 160ms;
+}
+.bean-editor .ai-form > :nth-child(n + 7) {
+  animation-delay: 185ms;
+}
+.ai-modal > header > button,
+.ai-modal footer button,
+.ai-modal .ai-submit,
+.ai-modal .ai-secondary {
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.ai-modal > header > button:hover,
+.ai-modal footer button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.ai-modal > header > button:active,
+.ai-modal footer button:active:not(:disabled) {
+  transform: translateY(0) scale(0.97);
+}
+.ai-preview {
+  transform-origin: 50% 20%;
+}
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(12px);
+  }
+}
+@keyframes modal-surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(22px) scale(0.975);
+    box-shadow: 0 10px 35px #0005;
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    box-shadow: 0 35px 100px #000b;
+  }
+}
+@keyframes modal-content-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes modal-field-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-modal-backdrop,
+  .ai-modal,
+  .ai-modal *,
+  .bean-processing-card::after {
+    scroll-behavior: auto !important;
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}
 .pour-bars article {
   isolation: isolate;
 }
