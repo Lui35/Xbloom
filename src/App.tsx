@@ -7,6 +7,7 @@ import {
   Library,
   Plus,
   Radio,
+  Save,
   Settings,
   Thermometer,
   Trash2,
@@ -477,6 +478,8 @@ function App() {
       return initialRecipes;
     }
   });
+  const savedRecipes = useRef<Recipe[]>(structuredClone(recipes));
+  const [recipeDirty, setRecipeDirty] = useState(false);
   const [selectedId, setSelectedId] = useState(1);
   const selected = recipes.find((r) => r.id === selectedId) || recipes[0];
   const [machineName, setMachineName] = useState(
@@ -523,10 +526,6 @@ function App() {
     }, 1000);
     return () => clearInterval(poll);
   }, []);
-  useEffect(
-    () => localStorage.setItem("xbloom-recipes", JSON.stringify(recipes)),
-    [recipes],
-  );
   useEffect(
     () => localStorage.setItem("xbloom-machine-name", machineName),
     [machineName],
@@ -581,9 +580,22 @@ function App() {
   ]);
 
   function updateRecipe(patch: Partial<Recipe>) {
+    setRecipeDirty(true);
     setRecipes((list) =>
       list.map((r) => (r.id === selected.id ? { ...r, ...patch } : r)),
     );
+  }
+  function saveRecipeChanges() {
+    localStorage.setItem("xbloom-recipes", JSON.stringify(recipes));
+    savedRecipes.current = structuredClone(recipes);
+    setRecipeDirty(false);
+  }
+  function selectRecipe(id: number) {
+    if (id === selected.id) return;
+    if (recipeDirty && !window.confirm("Discard your unsaved recipe changes?")) return;
+    if (recipeDirty) setRecipes(structuredClone(savedRecipes.current));
+    setRecipeDirty(false);
+    setSelectedId(savedRecipes.current.some((r) => r.id === id) ? id : savedRecipes.current[0].id);
   }
   function updatePour(index: number, patch: Partial<Pour>) {
     updateRecipe({
@@ -631,6 +643,7 @@ function App() {
       },
     ]);
     setSelectedId(id);
+    setRecipeDirty(true);
     setNav("Recipes");
   }
   function removeRecipe() {
@@ -642,6 +655,7 @@ function App() {
     const remaining = recipes.filter((r) => r.id !== selected.id);
     setRecipes(remaining);
     setSelectedId(remaining[0].id);
+    setRecipeDirty(true);
   }
 
   async function toggleConnection() {
@@ -679,6 +693,11 @@ function App() {
     }
   }
   async function startBrew() {
+    if (recipeDirty) {
+      setConnectionError("Save your recipe changes before starting a brew.");
+      setNav("Recipes");
+      return;
+    }
     if (!connected) return toggleConnection();
     if (
       !window.confirm(
@@ -826,6 +845,9 @@ function App() {
                 <h2>Edit your brew</h2>
               </div>
               <div className="recipe-actions">
+                <button className="save-recipe" onClick={saveRecipeChanges} disabled={!recipeDirty}>
+                  <Save size={17} /> {recipeDirty ? "Save changes" : "Saved"}
+                </button>
                 <button className="remove-recipe" onClick={removeRecipe}>
                   <Trash2 size={17} /> Remove recipe
                 </button>
@@ -839,7 +861,7 @@ function App() {
                 {recipes.map((r) => (
                   <button
                     className={r.id === selected.id ? "selected" : ""}
-                    onClick={() => setSelectedId(r.id)}
+                    onClick={() => selectRecipe(r.id)}
                     key={r.id}
                   >
                     <span className="bean" style={{ background: r.color }} />
@@ -973,7 +995,7 @@ function App() {
                   </div>
                 </div>
                 {selected.pours.map((p, i) => (
-                  <div className="pour-step" key={i}>
+                  <div className="pour-step" id={`pour-step-${i}`} key={i}>
                     <div className="pour-step-title">
                       <b>{i + 1}</b>
                       <div>
@@ -1123,6 +1145,12 @@ function App() {
                   {selected.pours.map((p, i) => (
                     <article
                       key={i}
+                      className="summary-pour"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Edit ${i === 0 ? "Bloom" : `Pour ${i + 1}`}`}
+                      onClick={() => document.getElementById(`pour-step-${i}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") document.getElementById(`pour-step-${i}`)?.scrollIntoView({ behavior: "smooth", block: "start" }) }}
                       style={{
                         height: `${Math.max(210, 170 + p.volume * 1.7)}px`,
                       }}
@@ -1189,9 +1217,9 @@ function App() {
               <button
                 className="danger-button"
                 onClick={() => {
-                  localStorage.removeItem("xbloom-recipes");
                   setRecipes(initialRecipes);
                   setSelectedId(1);
+                  setRecipeDirty(true);
                 }}
               >
                 Restore default recipes
@@ -1474,7 +1502,7 @@ function App() {
                 <button
                   key={r.id}
                   className={`recipe ${selected.id === r.id ? "selected" : ""}`}
-                  onClick={() => setSelectedId(r.id)}
+                  onClick={() => selectRecipe(r.id)}
                 >
                   <span className="bean" style={{ background: r.color }} />
                   <span>
