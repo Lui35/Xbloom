@@ -13,6 +13,8 @@ export const blankBean = (): Bean => ({
   species: "Arabica",
   variety: "",
   process: "Washed",
+  bean_size: "",
+  infused_with: "",
   roast_level: "Medium-light",
   tasting_notes: "",
   desired_cup: "",

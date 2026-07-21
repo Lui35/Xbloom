@@ -131,6 +131,22 @@ export function AppModals({ controller }: { controller: AppController }) {
                 </select>
               </label>
               <label>
+                Bean size / screen size
+                <input
+                  placeholder="e.g. Screen 16–18, small, large"
+                  value={aiBean.bean_size || ""}
+                  onChange={(e) => setAiBean({ ...aiBean, bean_size: e.target.value })}
+                />
+              </label>
+              <label>
+                Infused with
+                <input
+                  placeholder="Optional — e.g. strawberry, cinnamon"
+                  value={aiBean.infused_with || ""}
+                  onChange={(e) => setAiBean({ ...aiBean, infused_with: e.target.value })}
+                />
+              </label>
+              <label>
                 Altitude (masl)
                 <input
                   type="number"

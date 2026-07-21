@@ -37,6 +37,8 @@ export function BeansPage({ beans, openBeanEditor, openAI, saveBeans }: Props) {
                 <div className="bean-tags">
                   {[
                     bean.process,
+                    bean.bean_size,
+                    bean.infused_with ? `Infused: ${bean.infused_with}` : "",
                     bean.roast_level,
                     bean.altitude_masl ? `${bean.altitude_masl} masl` : "",
                   ]
@@ -75,8 +77,8 @@ export function BeansPage({ beans, openBeanEditor, openAI, saveBeans }: Props) {
           <Coffee size={42} />
           <h3>Your bean shelf is empty</h3>
           <p>
-            Add your first coffee and Gemini can reuse its origin, process, variety, and tasting
-            notes.
+            Add your first coffee and Gemini can reuse its origin, process, bean size, infusion,
+            variety, and tasting notes.
           </p>
           <button className="ai-button" onClick={() => openBeanEditor()}>
             <Plus size={17} /> Add your first bean

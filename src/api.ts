@@ -22,6 +22,8 @@ export type AIBeanProfile = {
   species?: string;
   variety?: string;
   process?: string;
+  bean_size?: string;
+  infused_with?: string;
   altitude_masl?: number;
   roast_level?: string;
   roast_date?: string;
