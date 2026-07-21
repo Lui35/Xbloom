@@ -57,9 +57,10 @@ class BrewRequest(BaseModel):
 
 class BeanProfile(BaseModel):
     brew_style: Literal["hot", "iced", "cold"]
+    cups: int = Field(default=1, ge=1, le=3)
     brewer: str = Field(min_length=1, max_length=60)
-    dose: float = Field(ge=5, le=30)
-    target_water: int = Field(ge=30, le=500)
+    dose: float | None = Field(default=None, ge=5, le=30)
+    target_water: int | None = Field(default=None, ge=30, le=500)
     country: str | None = Field(default=None, max_length=80)
     region: str | None = Field(default=None, max_length=100)
     producer: str | None = Field(default=None, max_length=100)
@@ -130,7 +131,7 @@ def normalize_ai_recipe(raw: str) -> dict[str, Any]:
     return data
 
 
-def recommended_pour_count(profile: BeanProfile) -> int:
+def recommended_pour_count(profile: BeanProfile, target_water: int, dose: float) -> int:
     details = " ".join(filter(None, (profile.roast_level, profile.process, profile.tasting_notes, profile.desired_cup))).lower()
     roast = (profile.roast_level or "").lower()
     body_markers = ("full body", "low acidity", "chocolate", "nutty", "nuts")
@@ -141,20 +142,22 @@ def recommended_pour_count(profile: BeanProfile) -> int:
         preferred = 5
     else:
         preferred = 4
-    bloom = min(240, round(profile.dose * 2.5))
-    minimum_for_volume = 1 + math.ceil(max(0, profile.target_water - bloom) / 240)
+    bloom = min(240, round(dose * 2.5))
+    minimum_for_volume = 1 + math.ceil(max(0, target_water - bloom) / 240)
     return max(preferred, minimum_for_volume)
 
 
 def fit_recipe_to_profile(recipe: AIRecipeResult, profile: BeanProfile) -> AIRecipeResult:
     """Make dose, step count, bloom, and total water exact without changing flavor choices."""
-    count = recommended_pour_count(profile)
+    dose = profile.dose if profile.dose is not None else recipe.dose
+    target_water = profile.target_water if profile.target_water is not None else sum(p.volume for p in recipe.pours)
+    count = recommended_pour_count(profile, target_water, dose)
     pours = list(recipe.pours[:count])
     while len(pours) < count:
         pours.append(pours[-1].model_copy())
-    bloom_min, bloom_max = round(profile.dose * 2), round(profile.dose * 4)
+    bloom_min, bloom_max = round(dose * 2), round(dose * 4)
     bloom_volume = max(bloom_min, min(bloom_max, pours[0].volume))
-    remaining = profile.target_water - bloom_volume
+    remaining = target_water - bloom_volume
     base, extra = divmod(remaining, count - 1)
     volumes = [bloom_volume] + [base + (1 if index < extra else 0) for index in range(count - 1)]
     fitted = []
@@ -163,22 +166,30 @@ def fit_recipe_to_profile(recipe: AIRecipeResult, profile: BeanProfile) -> AIRec
             "volume": volume,
             "pauseAfter": max(15, min(45, pour.pauseAfter or 30)) if index == 0 else (0 if index == count - 1 else pour.pauseAfter),
         }))
-    return recipe.model_copy(update={"dose": profile.dose, "pours": fitted})
+    return recipe.model_copy(update={"dose": dose, "pours": fitted})
 
 
 def recipe_quality_issues(recipe: AIRecipeResult, profile: BeanProfile) -> list[str]:
     """Check the generated plan against practical pour-over fundamentals."""
     issues: list[str] = []
     total = sum(p.volume for p in recipe.pours)
-    if abs(total - profile.target_water) > 2:
+    if profile.target_water is not None and abs(total - profile.target_water) > 2:
         issues.append(f"pour volumes total {total} ml instead of {profile.target_water} ml")
-    if abs(recipe.dose - profile.dose) > 0.1:
+    if profile.dose is not None and abs(recipe.dose - profile.dose) > 0.1:
         issues.append(f"dose changed from the requested {profile.dose} g to {recipe.dose} g")
-    expected_pours = recommended_pour_count(profile)
+    serving_ranges = {"hot": (180, 260), "iced": (120, 200), "cold": (150, 240)}
+    low_per_cup, high_per_cup = serving_ranges[profile.brew_style]
+    low, high = low_per_cup * profile.cups, min(500, high_per_cup * profile.cups)
+    if profile.target_water is None and not low <= total <= high:
+        issues.append(f"{profile.cups} {profile.brew_style} cup(s) should use about {low}-{high} ml, not {total} ml")
+    ratio = total / recipe.dose
+    if not 14.5 <= ratio <= 18.5:
+        issues.append(f"coffee-to-water ratio 1:{ratio:.1f} is outside the practical 1:14.5-1:18.5 range")
+    expected_pours = recommended_pour_count(profile, total, recipe.dose)
     if len(recipe.pours) != expected_pours:
         issues.append(f"this coffee profile calls for {expected_pours} pours, not {len(recipe.pours)}")
     bloom = recipe.pours[0]
-    bloom_min, bloom_max = profile.dose * 2, profile.dose * 4
+    bloom_min, bloom_max = recipe.dose * 2, recipe.dose * 4
     if not bloom_min <= bloom.volume <= bloom_max:
         issues.append(f"bloom should be about 2-4x dose ({bloom_min:.0f}-{bloom_max:.0f} ml)")
     if not 15 <= bloom.pauseAfter <= 45:
@@ -279,21 +290,26 @@ async def generate_ai_recipe(profile: BeanProfile):
     prompt = f"""You are an expert specialty-coffee recipe designer for an xBloom Studio.
 Create one practical recipe from the bean profile below.
 Return only the requested JSON schema. Respect every numeric schema limit.
+You choose the coffee dose and total machine water for the requested number of
+cups and brew style. Use roughly 180-260 ml per hot cup, 120-200 ml of machine
+water per iced cup (ice is separate), or 150-240 ml per cold cup. Keep the
+resulting ratio around 1:15-1:18 and total machine water at or below 500 ml.
 This is a pour-over recipe. Grind uses the xBloom scale: espresso is near 1,
 AeroPress near 16, pour-over is 31-55, and French press/cold brew begins near 56.
 You MUST choose a grind from 31 through 55. Use finer values within that range
 for more extraction and coarser values for less extraction.
-The sum of pour volumes should be close to target_water and never exceed 500 ml.
+The sum of pour volumes must equal the total water you choose and never exceed 500 ml.
 Each individual pour is limited to 240 ml.
 Use 3, 4, or 5 pours. Choose three for medium/darker, chocolate/nutty,
 full-body or low-acidity goals; four for balanced, sweet or juicy profiles; and
 five for light washed, floral/tea-like, high-clarity or high-extraction goals.
 Do not default to one count. Temperatures are Celsius. Flow is ml/s.
-For iced coffee, describe only hot water delivered by the machine; account for ice by reducing target brew water.
+For iced coffee, describe only hot water delivered by the machine; account for ice by reducing machine water.
 For cold style, use the lowest supported temperature and explain the compromise in rationale.
 Choose agitation conservatively. Keep the rationale concise and specific to the coffee.
 Before returning JSON, silently check the recipe like a specialty-coffee barista:
-- preserve the requested dose and make pours total the requested target water exactly;
+- choose a coherent dose and total water for the requested cups and brew style;
+- make the pours total your chosen water amount exactly;
 - use a bloom around 2-4 times the coffee dose with a 15-45 second rest;
 - keep the estimated water-delivery plus pauses roughly 1:45-4:00;
 - use an intentional coffee-to-water ratio, normally around 1:15-1:18;

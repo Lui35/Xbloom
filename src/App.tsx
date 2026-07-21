@@ -48,7 +48,7 @@ type Recipe = {
   pours: Pour[];
 };
 type Bean = AIBeanProfile & { id:number; name:string; roaster?:string };
-const blankBean=():Bean=>({id:Date.now(),name:"",roaster:"",brew_style:"hot",brewer:"xBloom Omni",dose:18,target_water:288,country:"",region:"",producer:"",species:"Arabica",variety:"",process:"Washed",roast_level:"Medium-light",tasting_notes:"",desired_cup:""});
+const blankBean=():Bean=>({id:Date.now(),name:"",roaster:"",brew_style:"hot",cups:1,brewer:"xBloom Omni",country:"",region:"",producer:"",species:"Arabica",variety:"",process:"Washed",roast_level:"Medium-light",tasting_notes:"",desired_cup:""});
 const initialRecipes: Recipe[] = [
   {
     id: 1,
@@ -604,7 +604,8 @@ function App() {
   function openAI(mode:"create"|"enhance",bean?:Bean) { setAiResult(null);setAiError("");setAiFeedback("");const linked=bean||beans.find(b=>b.id===selected.beanId);if(linked){setAiBean({...linked});setSelectedBeanId(linked.id);setAiMode(mode)}else if(mode==="enhance"&&selected.bean){setAiBean({...blankBean(),...selected.bean});setSelectedBeanId(null);setAiMode(mode)}else if(beans.length){setAiBean({...beans[0]});setSelectedBeanId(beans[0].id);setAiMode(mode)}else{setNav("Beans");setConnectionError("Add a bean first, then create an AI recipe from its card.")} }
   async function runAI() {
     setAiLoading(true);setAiElapsed(0);setAiError("");setAiResult(null);
-    try { setAiResult(aiMode==="enhance"?await xbloomApi.enhanceRecipe({bean:aiBean,recipe:selected,feedback:aiFeedback,rating:aiRating}):await xbloomApi.generateRecipe(aiBean)) }
+    const beanForAI={...aiBean,cups:aiBean.cups||1,dose:undefined,target_water:undefined};
+    try { setAiResult(aiMode==="enhance"?await xbloomApi.enhanceRecipe({bean:beanForAI,recipe:selected,feedback:aiFeedback,rating:aiRating}):await xbloomApi.generateRecipe(beanForAI)) }
     catch(error){setAiError(error instanceof Error?error.message:"AI recipe generation failed.")}
     finally{setAiLoading(false)}
   }
@@ -868,9 +869,7 @@ function App() {
           <div className="ai-bean-picker"><label>Bean<select value={selectedBeanId||""} onChange={e=>selectBeanForAI(+e.target.value)}>{beans.map(bean=><option value={bean.id} key={bean.id}>{bean.name}</option>)}</select></label>{selectedBeanId&&<span><Coffee size={18}/><b>{aiBean.name}</b><small>{[aiBean.country,aiBean.process,aiBean.variety].filter(Boolean).join(" · ")}</small></span>}</div>
           {!aiResult&&aiMode==="create"&&<div className="ai-form">
             <label>Brew style<select value={aiBean.brew_style} onChange={e=>setAiBean({...aiBean,brew_style:e.target.value as AIBeanProfile['brew_style']})}><option value="hot">Hot</option><option value="iced">Iced pour-over</option><option value="cold">Cold</option></select></label>
-            <label>Brewer<select value={aiBean.brewer} onChange={e=>setAiBean({...aiBean,brewer:e.target.value})}>{["xBloom Omni","V60","Kalita Wave","Origami","Orea","April","Chemex","Other"].map(v=><option key={v}>{v}</option>)}</select></label>
-            <label>Dose (g)<input type="number" min="5" max="30" value={aiBean.dose} onChange={e=>setAiBean({...aiBean,dose:+e.target.value})}/></label><label>Target water (ml)<input type="number" min="30" max="500" value={aiBean.target_water} onChange={e=>setAiBean({...aiBean,target_water:+e.target.value})}/></label>
-            <label className="wide">Cup goal<textarea placeholder="More sweetness, high clarity, tea-like body…" value={aiBean.desired_cup||""} onChange={e=>setAiBean({...aiBean,desired_cup:e.target.value})}/></label>
+            <label>How many cups?<select value={aiBean.cups||1} onChange={e=>setAiBean({...aiBean,cups:+e.target.value as 1|2|3})}><option value={1}>1 cup</option><option value={2}>2 cups</option><option value={3}>3 smaller cups</option></select></label>
           </div>}
           {!aiResult&&aiMode==="enhance"&&<div className="ai-feedback"><label>How did it taste?<textarea autoFocus placeholder="It was slightly sour and thin. I want more sweetness and body…" value={aiFeedback} onChange={e=>setAiFeedback(e.target.value)}/></label><label>Overall rating<select value={aiRating} onChange={e=>setAiRating(+e.target.value)}>{[1,2,3,4,5].map(v=><option value={v} key={v}>{v} / 5</option>)}</select></label><div className="feedback-chips">{["Too sour","Too bitter","Too weak","Too strong","More sweetness","More clarity","More body","Too dry"].map(text=><button key={text} onClick={()=>setAiFeedback(value=>`${value}${value?' ':''}${text}.`)}>{text}</button>)}</div></div>}
           {aiLoading&&<div className="ai-generating" role="status" aria-live="polite"><LoaderCircle/><div><strong>Designing your recipe</strong><span>Gemini is balancing the grind, temperature, and pours.</span><small>{aiElapsed}s elapsed · usually ready within 20–40 seconds</small></div></div>}

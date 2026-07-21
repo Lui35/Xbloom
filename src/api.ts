@@ -1,5 +1,5 @@
 export type MachineStatus = { connected:boolean; state:string; address?:string; weight?:number; temperature?:number; waterLevelOk?:boolean; waterVolume?:number; grinderRunning?:boolean; brewerRunning?:boolean; model?:string }
-export type AIBeanProfile={brew_style:'hot'|'iced'|'cold';brewer:string;dose:number;target_water:number;country?:string;region?:string;producer?:string;species?:string;variety?:string;process?:string;altitude_masl?:number;roast_level?:string;roast_date?:string;tasting_notes?:string;desired_cup?:string}
+export type AIBeanProfile={brew_style:'hot'|'iced'|'cold';cups?:1|2|3;brewer:string;dose?:number;target_water?:number;country?:string;region?:string;producer?:string;species?:string;variety?:string;process?:string;altitude_masl?:number;roast_level?:string;roast_date?:string;tasting_notes?:string;desired_cup?:string}
 export type AIRecipeResult={name:string;rationale:string;grind:number;rpm:60|70|80|90|100|110|120;dose:number;pours:Array<{volume:number;temp:number;flow:number;pauseAfter:number;pattern:'center'|'circular'|'spiral';agitationBefore:boolean;agitationAfter:boolean}>}
 const API = 'http://127.0.0.1:8766/api'
 
