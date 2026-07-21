@@ -4,9 +4,16 @@ export type AIRecipeResult={name:string;rationale:string;grind:number;rpm:60|70|
 const API = 'http://127.0.0.1:8766/api'
 
 async function call<T>(path:string, options?:RequestInit):Promise<T>{
-  const response=await fetch(`${API}${path}`,{headers:{'Content-Type':'application/json'},...options})
-  if(!response.ok){const body=await response.json().catch(()=>({detail:'Request failed'}));throw new Error(body.detail||'Request failed')}
-  return response.json()
+  const controller=new AbortController()
+  const timeout=window.setTimeout(()=>controller.abort(),75_000)
+  try{
+    const response=await fetch(`${API}${path}`,{headers:{'Content-Type':'application/json'},...options,signal:controller.signal})
+    if(!response.ok){const body=await response.json().catch(()=>({detail:'Request failed'}));throw new Error(body.detail||'Request failed')}
+    return response.json()
+  }catch(error){
+    if(error instanceof DOMException&&error.name==='AbortError')throw new Error('Gemini took too long to respond. Please try generating again.')
+    throw error
+  }finally{window.clearTimeout(timeout)}
 }
 export const xbloomApi={
   health:()=>call<{ok:boolean}>('/health'),

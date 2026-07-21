@@ -5,6 +5,7 @@ import {
   History,
   LayoutDashboard,
   Library,
+  LoaderCircle,
   Plus,
   Radio,
   Save,
@@ -466,6 +467,7 @@ function App() {
   const [recipeDirty, setRecipeDirty] = useState(false);
   const [aiMode,setAiMode]=useState<"create"|"enhance"|null>(null);
   const [aiLoading,setAiLoading]=useState(false);
+  const [aiElapsed,setAiElapsed]=useState(0);
   const [aiError,setAiError]=useState("");
   const [aiResult,setAiResult]=useState<AIRecipeResult|null>(null);
   const [aiFeedback,setAiFeedback]=useState("");
@@ -589,11 +591,12 @@ function App() {
   }
   function openAI(mode:"create"|"enhance") { setAiMode(mode);setAiResult(null);setAiError("");setAiFeedback("");if(mode==="enhance"&&selected.bean)setAiBean(selected.bean) }
   async function runAI() {
-    setAiLoading(true);setAiError("");setAiResult(null);
+    setAiLoading(true);setAiElapsed(0);setAiError("");setAiResult(null);
     try { setAiResult(aiMode==="enhance"?await xbloomApi.enhanceRecipe({bean:selected.bean,recipe:selected,feedback:aiFeedback,rating:aiRating}):await xbloomApi.generateRecipe(aiBean)) }
     catch(error){setAiError(error instanceof Error?error.message:"AI recipe generation failed.")}
     finally{setAiLoading(false)}
   }
+  useEffect(()=>{if(!aiLoading)return;const started=Date.now();const timer=window.setInterval(()=>setAiElapsed(Math.floor((Date.now()-started)/1000)),1000);return()=>window.clearInterval(timer)},[aiLoading])
   function saveAIRecipe(){if(!aiResult)return;const total=aiResult.pours.reduce((sum,p)=>sum+p.volume,0);const id=Date.now();const sourceBean=aiMode==="enhance"?(selected.bean||aiBean):aiBean;const recipe:Recipe={id,name:aiResult.name,roaster:aiMode==="enhance"?selected.roaster:"AI generated",origin:[sourceBean.country,sourceBean.region].filter(Boolean).join(" · ")||"AI coffee profile",temp:aiResult.pours[0].temp,ratio:`1:${(total/aiResult.dose).toFixed(1)}`,duration:formatTime(Math.round(aiResult.pours.reduce((sum,p)=>sum+p.volume/p.flow+p.pauseAfter,0))),color:aiMode==="enhance"?selected.color:"#8aa76b",grind:aiResult.grind,rpm:aiResult.rpm,dose:aiResult.dose,unit:"ml",useGrinder:true,bean:sourceBean,pours:aiResult.pours.map((p,i)=>({...p,pauseBefore:i===0?5:0}))};const next=[...recipes,recipe];setRecipes(next);setSelectedId(id);setRecipeDirty(true);setAiMode(null);setAiResult(null)}
   function selectRecipe(id: number) {
     if (id === selected.id) return;
@@ -855,7 +858,8 @@ function App() {
             <label className="wide">Tasting notes<input placeholder="e.g. strawberry, cacao, floral" value={aiBean.tasting_notes||""} onChange={e=>setAiBean({...aiBean,tasting_notes:e.target.value})}/></label><label className="wide">Cup goal<textarea placeholder="More sweetness, high clarity, tea-like body…" value={aiBean.desired_cup||""} onChange={e=>setAiBean({...aiBean,desired_cup:e.target.value})}/></label>
           </div>}
           {!aiResult&&aiMode==="enhance"&&<div className="ai-feedback"><label>How did it taste?<textarea autoFocus placeholder="It was slightly sour and thin. I want more sweetness and body…" value={aiFeedback} onChange={e=>setAiFeedback(e.target.value)}/></label><label>Overall rating<select value={aiRating} onChange={e=>setAiRating(+e.target.value)}>{[1,2,3,4,5].map(v=><option value={v} key={v}>{v} / 5</option>)}</select></label><div className="feedback-chips">{["Too sour","Too bitter","Too weak","Too strong","More sweetness","More clarity","More body","Too dry"].map(text=><button key={text} onClick={()=>setAiFeedback(value=>`${value}${value?' ':''}${text}.`)}>{text}</button>)}</div></div>}
-          {aiError&&<p className="ai-error" role="alert">{aiError}</p>}
+          {aiLoading&&<div className="ai-generating" role="status" aria-live="polite"><LoaderCircle/><div><strong>Designing your recipe</strong><span>Gemini is balancing the grind, temperature, and pours.</span><small>{aiElapsed}s elapsed · usually ready within 20–40 seconds</small></div></div>}
+          {aiError&&<p className="ai-error" role="alert"><strong>Recipe generation failed</strong><span>{aiError}</span></p>}
           {aiResult&&<div className="ai-preview"><div><Sparkles/><span><small>AI SUGGESTION</small><h3>{aiResult.name}</h3><p>{aiResult.rationale}</p></span></div><div className="ai-preview-stats"><span>Grind <b>{aiResult.grind}</b></span><span>Speed <b>{aiResult.rpm} RPM</b></span><span>Dose <b>{aiResult.dose}g</b></span><span>Water <b>{aiResult.pours.reduce((s,p)=>s+p.volume,0)}ml</b></span></div><div className="ai-preview-pours">{aiResult.pours.map((p,i)=><span key={i}><b>{i+1}</b>{p.volume}ml · {p.temp}° · {p.flow.toFixed(1)}ml/s</span>)}</div></div>}
           <footer>{aiResult?<><button className="ai-secondary" onClick={()=>setAiResult(null)}>Try again</button><button className="ai-submit" onClick={saveAIRecipe}><Save size={17}/> Save as new recipe</button></>:<><button className="ai-secondary" onClick={()=>setAiMode(null)}>Cancel</button><button className="ai-submit" disabled={aiLoading||(aiMode==="enhance"&&aiFeedback.trim().length<3)} onClick={runAI}><Sparkles size={17}/>{aiLoading?"Designing recipe…":aiMode==="create"?"Generate recipe":"Create improved copy"}</button></>}</footer>
         </section></div>}
