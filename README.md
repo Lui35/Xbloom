@@ -48,6 +48,16 @@ npm run dev:api
 The browser still uses port `8766`, but that port is then served by Windows where
 Bluetooth is available.
 
+## Library backups and coffee-label scanning
+
+Use **Settings → Recipe and bean library** to export or import a JSON backup.
+Imports merge into the existing library and receive new local IDs, so they do
+not overwrite existing entries.
+
+On **Beans**, choose **Import package photo** to send a JPEG, PNG, or WebP label
+image to the configured Gemini model. Detected coffee details open in the bean
+editor for review before they are saved locally. Images are limited to 10 MB.
+
 ## Bluetooth support
 
 The web UI runs locally at `http://127.0.0.1:5173`. A loopback-only API at `127.0.0.1:8766` uses the adjacent PyBloom clone for BLE discovery, telemetry, and validated brew execution. It does not use or expose MQTT.

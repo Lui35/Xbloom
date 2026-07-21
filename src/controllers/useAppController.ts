@@ -62,6 +62,9 @@ export function useAppController() {
   const [aiBean, setAiBean] = useState<Bean>(blankBean);
   const [selectedBeanId, setSelectedBeanId] = useState<number | null>(null);
   const [beanEditor, setBeanEditor] = useState(false);
+  const [beanPhotoLoading, setBeanPhotoLoading] = useState(false);
+  const [beanPhotoError, setBeanPhotoError] = useState("");
+  const [libraryMessage, setLibraryMessage] = useState("");
   const [selectedId, setSelectedId] = useState(1);
   const selected = recipes.find((r) => r.id === selectedId) || recipes[0];
   const [machineName, setMachineName] = useState(
@@ -224,6 +227,133 @@ export function useAppController() {
   function saveBeanEditor() {
     saveCurrentBean();
     setBeanEditor(false);
+  }
+  async function importBeanPhoto(file: File) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setBeanPhotoError("Choose a JPEG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setBeanPhotoError("The image must be smaller than 10 MB.");
+      return;
+    }
+    setBeanPhotoLoading(true);
+    setBeanPhotoError("");
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("The image could not be opened."));
+        reader.readAsDataURL(file);
+      });
+      const scanned = await xbloomApi.importBeanPhoto({
+        image_base64: dataUrl.split(",", 2)[1],
+        mime_type: file.type,
+      });
+      setAiBean({
+        ...blankBean(),
+        ...scanned,
+        id: Date.now(),
+        name: scanned.name || file.name.replace(/\.[^.]+$/, ""),
+      });
+      setSelectedBeanId(null);
+      setBeanEditor(true);
+    } catch (error) {
+      setBeanPhotoError(
+        error instanceof Error ? error.message : "The coffee label could not be read.",
+      );
+    } finally {
+      setBeanPhotoLoading(false);
+    }
+  }
+  function exportLibrary() {
+    const backup = {
+      format: "xbloom-library",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      recipes: savedRecipes.current,
+      beans,
+    };
+    const url = URL.createObjectURL(
+      new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `xbloom-library-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setLibraryMessage(`Exported ${beans.length} beans and ${savedRecipes.current.length} recipes.`);
+  }
+  async function importLibrary(file: File) {
+    setLibraryMessage("");
+    try {
+      const data = JSON.parse(await file.text()) as { recipes?: unknown; beans?: unknown };
+      if (!Array.isArray(data.recipes) && !Array.isArray(data.beans))
+        throw new Error("This file does not contain an xBloom recipe or bean library.");
+      const now = Date.now();
+      const beanIdMap = new Map<number, number>();
+      const importedBeans = (Array.isArray(data.beans) ? data.beans : [])
+        .slice(0, 500)
+        .filter((bean): bean is Bean => Boolean(bean && typeof bean === "object" && "name" in bean))
+        .map((bean, index) => {
+          const id = now + index;
+          beanIdMap.set(bean.id, id);
+          return {
+            ...blankBean(),
+            ...bean,
+            id,
+            name: String(bean.name).slice(0, 100),
+          };
+        });
+      const importedRecipes = (Array.isArray(data.recipes) ? data.recipes : [])
+        .slice(0, 500)
+        .filter((recipe): recipe is Recipe =>
+          Boolean(
+            recipe &&
+            typeof recipe === "object" &&
+            "name" in recipe &&
+            "pours" in recipe &&
+            Array.isArray((recipe as Recipe).pours) &&
+            (recipe as Recipe).pours.length,
+          ),
+        )
+        .map((recipe, index) => ({
+          ...initialRecipes[0],
+          ...recipe,
+          id: now + importedBeans.length + index,
+          name: String(recipe.name).slice(0, 100),
+          beanId: recipe.beanId ? beanIdMap.get(recipe.beanId) : undefined,
+          pours: recipe.pours.slice(0, 8).map((pour, pourIndex) => ({
+            volume: Math.max(0, Math.min(240, Number(pour.volume) || 0)),
+            temp: Math.max(80, Math.min(96, Number(pour.temp) || 93)),
+            flow: Math.max(3, Math.min(3.5, Number(pour.flow) || 3.2)),
+            pauseBefore: pourIndex === 0 ? 5 : 0,
+            pauseAfter: Math.max(0, Math.min(60, Number(pour.pauseAfter) || 0)),
+            pattern: ["center", "circular", "spiral"].includes(pour.pattern)
+              ? pour.pattern
+              : "spiral",
+            agitationBefore: Boolean(pour.agitationBefore),
+            agitationAfter: Boolean(pour.agitationAfter),
+          })),
+        }));
+      if (!importedBeans.length && !importedRecipes.length)
+        throw new Error("No valid beans or recipes were found in this file.");
+      const nextBeans = [...beans, ...importedBeans];
+      const nextRecipes = [...savedRecipes.current, ...importedRecipes];
+      saveBeans(nextBeans);
+      setRecipes(nextRecipes);
+      savedRecipes.current = structuredClone(nextRecipes);
+      localStorage.setItem("xbloom-recipes", JSON.stringify(nextRecipes));
+      setRecipeDirty(false);
+      if (importedRecipes[0]) setSelectedId(importedRecipes[0].id);
+      setLibraryMessage(
+        `Imported ${importedBeans.length} beans and ${importedRecipes.length} recipes.`,
+      );
+    } catch (error) {
+      setLibraryMessage(
+        error instanceof Error ? error.message : "The library could not be imported.",
+      );
+    }
   }
   function openAI(mode: "create" | "enhance", bean?: Bean) {
     setAiResult(null);
@@ -514,6 +644,9 @@ export function useAppController() {
     setAiBean,
     selectedBeanId,
     beanEditor,
+    beanPhotoLoading,
+    beanPhotoError,
+    libraryMessage,
     setBeanEditor,
     selectedId,
     setSelectedId,
@@ -537,6 +670,9 @@ export function useAppController() {
     selectBeanForAI,
     openBeanEditor,
     saveBeanEditor,
+    importBeanPhoto,
+    exportLibrary,
+    importLibrary,
     openAI,
     runAI,
     saveAIRecipe,

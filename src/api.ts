@@ -51,6 +51,10 @@ export type AIRecipeResult = {
     agitationAfter: boolean;
   }>;
 };
+export type AIBeanPhotoResult = Omit<AIBeanProfile, "brew_style" | "brewer" | "cups"> & {
+  name: string;
+  roaster?: string;
+};
 const API = "http://127.0.0.1:8766/api";
 
 async function call<T>(path: string, options?: RequestInit): Promise<T> {
@@ -98,4 +102,9 @@ export const xbloomApi = {
     rating?: number;
   }) =>
     call<AIRecipeResult>("/ai/enhance-recipe", { method: "POST", body: JSON.stringify(payload) }),
+  importBeanPhoto: (payload: { image_base64: string; mime_type: string }) =>
+    call<AIBeanPhotoResult>("/ai/import-bean-photo", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
 };

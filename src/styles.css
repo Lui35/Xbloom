@@ -3300,3 +3300,79 @@ main {
 .ai-error span {
   color: #e7b39b;
 }
+
+.bean-page-actions,
+.library-transfer > span {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.photo-import,
+.import-library,
+.library-transfer button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 15px;
+  border: 1px solid #41463b;
+  border-radius: 9px;
+  background: #171a15;
+  color: #d7dbd2;
+  font-size: 12px;
+  cursor: pointer;
+}
+.photo-import input,
+.import-library input {
+  display: none;
+}
+.photo-import.loading {
+  cursor: wait;
+  color: #cadd5c;
+}
+.photo-import.loading svg {
+  animation: ai-spin 1s linear infinite;
+}
+.bean-photo-error,
+.library-message {
+  padding: 11px 14px;
+  border: 1px solid #4a4f42;
+  border-radius: 9px;
+  background: #171a15;
+  color: #c8cdc2;
+  font-size: 11px;
+}
+.bean-photo-error {
+  border-color: #70422f;
+  background: #281a14;
+  color: #ee9a75;
+}
+.library-transfer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 0;
+  border-top: 1px solid #30342d;
+  border-bottom: 1px solid #30342d;
+}
+.library-transfer > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.library-transfer small {
+  color: #81867d;
+}
+.library-transfer button {
+  font-family: inherit;
+}
+@media (max-width: 800px) {
+  .bean-page-actions,
+  .library-transfer,
+  .library-transfer > span {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

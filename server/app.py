@@ -121,6 +121,29 @@ class EnhanceRecipeRequest(BaseModel):
     rating: int | None = Field(default=None, ge=1, le=5)
 
 
+class BeanPhotoRequest(BaseModel):
+    image_base64: str = Field(min_length=20, max_length=16_000_000)
+    mime_type: Literal["image/jpeg", "image/png", "image/webp"]
+
+
+class BeanPhotoResult(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    roaster: str | None = Field(default=None, max_length=100)
+    country: str | None = Field(default=None, max_length=80)
+    region: str | None = Field(default=None, max_length=100)
+    producer: str | None = Field(default=None, max_length=100)
+    species: str | None = Field(default=None, max_length=50)
+    variety: str | None = Field(default=None, max_length=100)
+    process: str | None = Field(default=None, max_length=100)
+    bean_size: str | None = Field(default=None, max_length=80)
+    acidity: int | None = Field(default=None, ge=1, le=5)
+    process_detail: str | None = Field(default=None, max_length=200)
+    altitude_masl: int | None = Field(default=None, ge=0, le=3000)
+    roast_level: str | None = Field(default=None, max_length=50)
+    roast_date: str | None = Field(default=None, max_length=30)
+    tasting_notes: str | None = Field(default=None, max_length=300)
+
+
 def normalize_ai_recipe(raw: str) -> dict[str, Any]:
     """Accept harmless model deviations while preserving machine safety limits."""
     data = json.loads(raw)
@@ -301,6 +324,47 @@ async def ask_gemini(prompt: str) -> AIRecipeResult:
     return result
 
 
+async def read_bean_photo(request: BeanPhotoRequest) -> BeanPhotoResult:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "Gemini is not configured. Add GEMINI_API_KEY to .env and restart the backend.")
+    prompt = """Read this specialty-coffee package label and extract only facts visible on it.
+Do not guess missing values. Use null when a field is absent or uncertain.
+For name, use the coffee/product name, not the roaster name. Preserve named
+varieties and processing terms. Put co-fermentation, infusion, honey type, or
+decaffeination details in process_detail. Convert a printed acidity rating to a
+1-5 scale only when the label provides enough evidence. Return only JSON."""
+    body = {
+        "contents": [{"role": "user", "parts": [
+            {"text": prompt},
+            {"inlineData": {"mimeType": request.mime_type, "data": request.image_base64}},
+        ]}],
+        "generationConfig": {
+            "temperature": 0.1,
+            "responseMimeType": "application/json",
+            "responseJsonSchema": BeanPhotoResult.model_json_schema(),
+        },
+    }
+    models = [os.getenv("GEMINI_MODEL", "gemini-3.5-flash"), os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")]
+    response = None
+    try:
+        async with httpx.AsyncClient(timeout=45) as session:
+            for model in dict.fromkeys(models):
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+                response = await session.post(url, headers={"x-goog-api-key": api_key}, json=body)
+                if response.status_code not in (429, 503):
+                    break
+        if response is None or response.status_code >= 400:
+            detail = response.json().get("error", {}).get("message", "Gemini image request failed") if response else "Gemini did not respond"
+            raise HTTPException(502, detail)
+        raw = response.json()["candidates"][0]["content"]["parts"][0]["text"]
+        return BeanPhotoResult.model_validate_json(raw)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(502, f"The coffee label could not be read: {str(error) or type(error).__name__}") from error
+
+
 def status_payload():
     if not client:
         return {"connected": False, "address": device_address, "state": "offline"}
@@ -382,6 +446,11 @@ Bean profile:
         if remaining:
             raise HTTPException(502, "AI recipe did not pass the brew-quality checks: " + "; ".join(remaining))
     return recipe
+
+
+@app.post("/api/ai/import-bean-photo", response_model=BeanPhotoResult)
+async def import_bean_photo(request: BeanPhotoRequest):
+    return await read_bean_photo(request)
 
 
 @app.post("/api/ai/enhance-recipe", response_model=AIRecipeResult)

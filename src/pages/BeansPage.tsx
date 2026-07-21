@@ -1,4 +1,4 @@
-import { Coffee, Plus, Sparkles, Trash2 } from "lucide-react";
+import { Coffee, ImageUp, LoaderCircle, Plus, Sparkles, Trash2 } from "lucide-react";
 import type { Bean } from "../domain/models";
 import { processDetailConfig } from "../domain/beanProcessing";
 
@@ -7,8 +7,19 @@ type Props = {
   openBeanEditor: (bean?: Bean) => void;
   openAI: (mode: "create" | "enhance", bean?: Bean) => void;
   saveBeans: (beans: Bean[]) => void;
+  importBeanPhoto: (file: File) => Promise<void>;
+  beanPhotoLoading: boolean;
+  beanPhotoError: string;
 };
-export function BeansPage({ beans, openBeanEditor, openAI, saveBeans }: Props) {
+export function BeansPage({
+  beans,
+  openBeanEditor,
+  openAI,
+  saveBeans,
+  importBeanPhoto,
+  beanPhotoLoading,
+  beanPhotoError,
+}: Props) {
   return (
     <section className="editor-page beans-page">
       <div className="page-heading">
@@ -17,10 +28,27 @@ export function BeansPage({ beans, openBeanEditor, openAI, saveBeans }: Props) {
           <h2>Beans</h2>
           <p>Save a coffee once, then reuse its details in every AI recipe.</p>
         </div>
-        <button className="add-button" onClick={() => openBeanEditor()}>
-          <Plus size={17} /> Add bean
-        </button>
+        <div className="bean-page-actions">
+          <label className={`photo-import ${beanPhotoLoading ? "loading" : ""}`}>
+            {beanPhotoLoading ? <LoaderCircle /> : <ImageUp />}
+            {beanPhotoLoading ? "Reading package…" : "Import package photo"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={beanPhotoLoading}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importBeanPhoto(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <button className="add-button" onClick={() => openBeanEditor()}>
+            <Plus size={17} /> Add bean
+          </button>
+        </div>
       </div>
+      {beanPhotoError && <p className="bean-photo-error">{beanPhotoError}</p>}
       {beans.length ? (
         <div className="bean-library">
           {beans.map((bean) => {

@@ -16,18 +16,17 @@ function App() {
     connectionError,
     waterAlert,
     setWaterAlert,
-    setRecipes,
-    setRecipeDirty,
     beans,
-    setSelectedId,
     machineName,
-    setMachineName,
     brewing,
     history,
     nav,
     setNav,
     navItems,
     saveBeans,
+    importBeanPhoto,
+    beanPhotoLoading,
+    beanPhotoError,
     openBeanEditor,
     openAI,
     toggleConnection,
@@ -123,17 +122,12 @@ function App() {
             openBeanEditor={openBeanEditor}
             openAI={openAI}
             saveBeans={saveBeans}
+            importBeanPhoto={importBeanPhoto}
+            beanPhotoLoading={beanPhotoLoading}
+            beanPhotoError={beanPhotoError}
           />
         )}
-        {nav === "Settings" && (
-          <SettingsPage
-            machineName={machineName}
-            setMachineName={setMachineName}
-            setRecipes={setRecipes}
-            setSelectedId={setSelectedId}
-            setRecipeDirty={setRecipeDirty}
-          />
-        )}
+        {nav === "Settings" && <SettingsPage controller={controller} />}
         {nav === "History" && <HistoryPage history={history} />}
 
         {nav === "Brew" && <BrewPage controller={controller} />}

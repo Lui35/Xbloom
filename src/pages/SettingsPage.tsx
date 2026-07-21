@@ -1,21 +1,18 @@
-import type { Dispatch, SetStateAction } from "react";
-import type { Recipe } from "../domain/models";
+import { Download, Upload } from "lucide-react";
+import type { AppController } from "../controllers/useAppController";
 import { initialRecipes } from "../domain/recipes";
 
-type Props = {
-  machineName: string;
-  setMachineName: (name: string) => void;
-  setRecipes: Dispatch<SetStateAction<Recipe[]>>;
-  setSelectedId: (id: number) => void;
-  setRecipeDirty: (dirty: boolean) => void;
-};
-export function SettingsPage({
-  machineName,
-  setMachineName,
-  setRecipes,
-  setSelectedId,
-  setRecipeDirty,
-}: Props) {
+export function SettingsPage({ controller }: { controller: AppController }) {
+  const {
+    machineName,
+    setMachineName,
+    setRecipes,
+    setSelectedId,
+    setRecipeDirty,
+    exportLibrary,
+    importLibrary,
+    libraryMessage,
+  } = controller;
   return (
     <section className="editor-page settings-page">
       <div className="page-heading">
@@ -44,6 +41,30 @@ export function SettingsPage({
           </div>
           <span className="safe-pill">Enabled</span>
         </div>
+        <div className="library-transfer">
+          <div>
+            <strong>Recipe and bean library</strong>
+            <small>Back up or move all saved recipes and beans as one JSON file.</small>
+          </div>
+          <span>
+            <label className="import-library">
+              <Upload size={16} /> Import
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void importLibrary(file);
+                  event.target.value = "";
+                }}
+              />
+            </label>
+            <button onClick={exportLibrary}>
+              <Download size={16} /> Export
+            </button>
+          </span>
+        </div>
+        {libraryMessage && <p className="library-message">{libraryMessage}</p>}
         <button
           className="danger-button"
           onClick={() => {
