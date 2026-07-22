@@ -59,20 +59,48 @@ export type AIBeanPhotoResult = Omit<AIBeanProfile, "brew_style" | "brewer" | "c
   roaster?: string;
   confidence: Record<string, number>;
 };
+export type GeminiModel =
+  | "gemini-3.6-flash"
+  | "gemini-3.5-flash"
+  | "gemini-3.5-flash-lite"
+  | "gemini-3.1-flash-lite";
 const API = "http://127.0.0.1:8766/api";
+
+function errorMessage(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (!item || typeof item !== "object") return String(item);
+        const issue = item as { loc?: unknown[]; msg?: string };
+        const field = issue.loc?.filter((part) => part !== "body").join(" → ");
+        return [field, issue.msg].filter(Boolean).join(": ");
+      })
+      .filter(Boolean);
+    if (messages.length) return messages.join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      // Fall through to the generic message.
+    }
+  }
+  return "Request failed";
+}
 
 async function call<T>(path: string, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 75_000);
   try {
     const response = await fetch(`${API}${path}`, {
-      headers: { "Content-Type": "application/json" },
       ...options,
+      headers: { "Content-Type": "application/json", ...options?.headers },
       signal: controller.signal,
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({ detail: "Request failed" }));
-      throw new Error(body.detail || "Request failed");
+      throw new Error(errorMessage(body.detail));
     }
     return response.json();
   } catch (error) {
@@ -97,18 +125,30 @@ export const xbloomApi = {
   stop: () => call<{ stopped: boolean }>("/stop", { method: "POST" }),
   brew: (recipe: unknown) =>
     call<{ started: boolean }>("/brew", { method: "POST", body: JSON.stringify(recipe) }),
-  generateRecipe: (bean: AIBeanProfile) =>
-    call<AIRecipeResult>("/ai/generate-recipe", { method: "POST", body: JSON.stringify(bean) }),
+  generateRecipe: (bean: AIBeanProfile, model: GeminiModel) =>
+    call<AIRecipeResult>("/ai/generate-recipe", {
+      method: "POST",
+      headers: { "X-Gemini-Model": model },
+      body: JSON.stringify(bean),
+    }),
   enhanceRecipe: (payload: {
     bean?: AIBeanProfile;
     recipe: unknown;
     feedback: string;
     rating?: number;
-  }) =>
-    call<AIRecipeResult>("/ai/enhance-recipe", { method: "POST", body: JSON.stringify(payload) }),
-  importBeanPhoto: (payload: { images: Array<{ image_base64: string; mime_type: string }> }) =>
+  }, model: GeminiModel) =>
+    call<AIRecipeResult>("/ai/enhance-recipe", {
+      method: "POST",
+      headers: { "X-Gemini-Model": model },
+      body: JSON.stringify(payload),
+    }),
+  importBeanPhoto: (
+    payload: { images: Array<{ image_base64: string; mime_type: string }> },
+    model: GeminiModel,
+  ) =>
     call<AIBeanPhotoResult>("/ai/import-bean-photo", {
       method: "POST",
+      headers: { "X-Gemini-Model": model },
       body: JSON.stringify(payload),
     }),
   loadData: () => call<{ beans: unknown[]; recipes: unknown[]; history: unknown[] }>("/data"),

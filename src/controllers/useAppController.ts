@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Coffee, History, LayoutDashboard, Library, Settings } from "lucide-react";
-import { AIRecipeResult, MachineStatus, xbloomApi } from "../api";
+import { AIRecipeResult, GeminiModel, MachineStatus, xbloomApi } from "../api";
 import type { Bean, BrewRecord, BrewSample, Pour, Recipe } from "../domain/models";
 import { blankBean, initialRecipes } from "../domain/recipes";
 import { estimateBrew, formatTime } from "../domain/brewing";
@@ -96,6 +96,17 @@ export function useAppController() {
   const [machineName, setMachineName] = useState(
     () => localStorage.getItem("xbloom-machine-name") || "xBloom Studio",
   );
+  const [geminiModel, setGeminiModelState] = useState<GeminiModel>(() => {
+    const saved = localStorage.getItem("xbloom-gemini-model");
+    return [
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3.1-flash-lite",
+    ].includes(saved || "")
+      ? (saved as GeminiModel)
+      : "gemini-3.6-flash";
+  });
   const [brewing, setBrewing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -404,7 +415,7 @@ export function useAppController() {
           image_base64: dataUrl.split(",", 2)[1],
           mime_type: files[index].type,
         })),
-      });
+      }, geminiModel);
       const importedBean: Bean = {
         ...blankBean(),
         ...scanned,
@@ -578,8 +589,8 @@ export function useAppController() {
               recipe: selected,
               feedback: aiFeedback,
               rating: aiRating,
-            })
-          : await xbloomApi.generateRecipe(beanForAI),
+            }, geminiModel)
+          : await xbloomApi.generateRecipe(beanForAI, geminiModel),
       );
     } catch (error) {
       setAiError(error instanceof Error ? error.message : "AI recipe generation failed.");
@@ -909,6 +920,11 @@ export function useAppController() {
     selected,
     machineName,
     setMachineName,
+    geminiModel,
+    setGeminiModel: (model: GeminiModel) => {
+      setGeminiModelState(model);
+      localStorage.setItem("xbloom-gemini-model", model);
+    },
     brewing,
     progress,
     elapsed,

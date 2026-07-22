@@ -6,6 +6,8 @@ export function SettingsPage({ controller }: { controller: AppController }) {
   const {
     machineName,
     setMachineName,
+    geminiModel,
+    setGeminiModel,
     setRecipes,
     setSelectedId,
     setRecipeDirty,
@@ -26,6 +28,16 @@ export function SettingsPage({ controller }: { controller: AppController }) {
           Machine name
           <input value={machineName} onChange={(e) => setMachineName(e.target.value)} />
           <small>Shown throughout your local dashboard.</small>
+        </label>
+        <label>
+          Gemini model
+          <select value={geminiModel} onChange={(event) => setGeminiModel(event.target.value as typeof geminiModel)}>
+            <option value="gemini-3.6-flash">Gemini 3.6 Flash — recommended</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash</option>
+            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite — fastest</option>
+            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite — legacy</option>
+          </select>
+          <small>Used for AI recipes, recipe enhancement, and coffee-label scanning.</small>
         </label>
         <div className="setting-row">
           <div>

@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile.api
     environment:
       AI_PROVIDER: ${AI_PROVIDER:-gemini}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
       GEMINI_FALLBACK_MODEL: ${GEMINI_FALLBACK_MODEL:-gemini-3.1-flash-lite}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       XBLOOM_DEVICE_CACHE: /app/data/.xbloom-device.json

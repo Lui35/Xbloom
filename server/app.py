@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -33,6 +33,19 @@ DATABASE_FILE = Path(os.getenv("XBLOOM_DATABASE", PROJECT_ROOT / "xbloom.db"))
 BLUETOOTH_BRIDGE_URL = os.getenv("XBLOOM_BLUETOOTH_BRIDGE_URL", "").rstrip("/")
 BLUETOOTH_BRIDGE_TOKEN = os.getenv("XBLOOM_BRIDGE_TOKEN", "xbloom-local-bridge")
 IS_BLUETOOTH_BRIDGE = os.getenv("XBLOOM_BRIDGE_SERVER", "") == "1"
+GEMINI_MODELS = {
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+}
+
+
+def selected_gemini_model(requested: str | None) -> str:
+    model = requested or os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    if model not in GEMINI_MODELS:
+        raise HTTPException(400, "Unsupported Gemini model.")
+    return model
 
 
 async def forward_to_bluetooth_bridge(
@@ -370,7 +383,7 @@ def recipe_quality_issues(recipe: AIRecipeResult, profile: BeanProfile) -> list[
     return issues
 
 
-async def ask_gemini(prompt: str) -> AIRecipeResult:
+async def ask_gemini(prompt: str, model: str) -> AIRecipeResult:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(503, "Gemini is not configured. Add GEMINI_API_KEY to .env and restart the backend.")
@@ -386,7 +399,7 @@ async def ask_gemini(prompt: str) -> AIRecipeResult:
         async with httpx.AsyncClient(timeout=35) as session:
             response = None
             transport_error = None
-            models = [os.getenv("GEMINI_MODEL", "gemini-3.5-flash"), os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")]
+            models = [model, os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")]
             for model in dict.fromkeys(models):
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
                 try:
@@ -418,7 +431,7 @@ async def ask_gemini(prompt: str) -> AIRecipeResult:
     return result
 
 
-async def read_bean_photo(request: BeanPhotoRequest) -> BeanPhotoResult:
+async def read_bean_photo(request: BeanPhotoRequest, model: str) -> BeanPhotoResult:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(503, "Gemini is not configured. Add GEMINI_API_KEY to .env and restart the backend.")
@@ -443,7 +456,7 @@ score for every non-null extracted field in confidence. Return only JSON."""
             "responseJsonSchema": BeanPhotoResult.model_json_schema(),
         },
     }
-    models = [os.getenv("GEMINI_MODEL", "gemini-3.5-flash"), os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")]
+    models = [model, os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")]
     response = None
     try:
         async with httpx.AsyncClient(timeout=45) as session:
@@ -535,7 +548,8 @@ async def save_app_data(payload: AppDataPayload):
 
 
 @app.post("/api/ai/generate-recipe", response_model=AIRecipeResult)
-async def generate_ai_recipe(profile: BeanProfile):
+async def generate_ai_recipe(profile: BeanProfile, x_gemini_model: str | None = Header(default=None)):
+    model = selected_gemini_model(x_gemini_model)
     prompt = f"""You are an expert specialty-coffee recipe designer for an xBloom Studio.
 Create one practical recipe from the bean profile below.
 Return only the requested JSON schema. Respect every numeric schema limit.
@@ -574,11 +588,11 @@ Before returning JSON, silently check the recipe like a specialty-coffee barista
 
 Bean profile:
 {profile.model_dump_json(exclude_none=True)}"""
-    recipe = fit_recipe_to_profile(await ask_gemini(prompt), profile)
+    recipe = fit_recipe_to_profile(await ask_gemini(prompt, model), profile)
     issues = recipe_quality_issues(recipe, profile)
     if issues:
         repair_prompt = prompt + "\n\nYour previous proposal failed these checks:\n- " + "\n- ".join(issues) + "\nReturn a corrected recipe and vary only what is needed."
-        recipe = fit_recipe_to_profile(await ask_gemini(repair_prompt), profile)
+        recipe = fit_recipe_to_profile(await ask_gemini(repair_prompt, model), profile)
         remaining = recipe_quality_issues(recipe, profile)
         if remaining:
             raise HTTPException(502, "AI recipe did not pass the brew-quality checks: " + "; ".join(remaining))
@@ -586,12 +600,13 @@ Bean profile:
 
 
 @app.post("/api/ai/import-bean-photo", response_model=BeanPhotoResult)
-async def import_bean_photo(request: BeanPhotoRequest):
-    return await read_bean_photo(request)
+async def import_bean_photo(request: BeanPhotoRequest, x_gemini_model: str | None = Header(default=None)):
+    return await read_bean_photo(request, selected_gemini_model(x_gemini_model))
 
 
 @app.post("/api/ai/enhance-recipe", response_model=AIRecipeResult)
-async def enhance_ai_recipe(request: EnhanceRecipeRequest):
+async def enhance_ai_recipe(request: EnhanceRecipeRequest, x_gemini_model: str | None = Header(default=None)):
+    model = selected_gemini_model(x_gemini_model)
     prompt = f"""You are an expert specialty-coffee dial-in assistant for an xBloom Studio.
 Create an improved COPY of the recipe based on the user's taste feedback.
 Return only the requested JSON schema. Respect every numeric schema limit.
@@ -613,13 +628,13 @@ Bean profile (may be absent):
 
 Rating: {request.rating or "Not provided"}/5
 Taste feedback: {request.feedback}"""
-    recipe = await ask_gemini(prompt)
+    recipe = await ask_gemini(prompt, model)
     if request.bean:
         recipe = fit_recipe_to_profile(recipe, request.bean)
         issues = recipe_quality_issues(recipe, request.bean)
         if issues:
             repair_prompt = prompt + "\n\nCorrect these brew-quality issues before returning JSON:\n- " + "\n- ".join(issues)
-            recipe = fit_recipe_to_profile(await ask_gemini(repair_prompt), request.bean)
+            recipe = fit_recipe_to_profile(await ask_gemini(repair_prompt, model), request.bean)
             remaining = recipe_quality_issues(recipe, request.bean)
             if remaining:
                 raise HTTPException(502, "Improved recipe did not pass the brew-quality checks: " + "; ".join(remaining))
