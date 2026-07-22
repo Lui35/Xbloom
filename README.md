@@ -32,21 +32,30 @@ docker compose up --build
 Open `http://127.0.0.1:5173`. The API is available at
 `http://127.0.0.1:8766`.
 
-Docker is useful for the web interface, AI recipes, and simulation. On Windows,
-run the API natively when controlling a real xBloom machine because Docker
-Desktop does not reliably pass the host Bluetooth adapter into Linux containers.
+Docker Desktop cannot pass the Windows Bluetooth adapter directly into its Linux
+containers. This project uses a small authenticated Windows bridge for physical
+machine control while keeping the web app, AI, and SQLite API in Docker.
 
-For the web UI in Docker with real machine control on Windows, run only the web
-container and start the API natively in a second terminal:
+Start the bridge in one PowerShell terminal and leave it open:
 
 ```powershell
-docker compose stop api
-docker compose up -d web
-npm run dev:api
+npm run bluetooth:bridge
 ```
 
-The browser still uses port `8766`, but that port is then served by Windows where
-Bluetooth is available.
+Then start the complete Docker app in another terminal:
+
+```powershell
+docker compose up --build
+```
+
+The browser continues to call the container API on port `8766`. AI and data calls
+stay inside that API; device discovery, connect, status, brew, stop, disconnect,
+and the Windows Bluetooth settings shortcut are forwarded to the native bridge
+on port `8767` through `host.docker.internal`.
+
+Set the same `XBLOOM_BRIDGE_TOKEN` in `.env` for both processes. The bridge
+rejects unauthenticated device requests. Port `8767` is not intended for remote
+access and should remain protected by Windows Firewall.
 
 ## Library backups and coffee-label scanning
 
@@ -67,4 +76,7 @@ then back), include per-field AI confidence, and save directly to the bean shelf
 
 ## Bluetooth support
 
-The web UI runs locally at `http://127.0.0.1:5173`. A loopback-only API at `127.0.0.1:8766` uses the adjacent PyBloom clone for BLE discovery, telemetry, and validated brew execution. It does not use or expose MQTT.
+For native development, the API at `127.0.0.1:8766` uses the adjacent PyBloom
+clone directly. Under Docker Compose, the container API proxies only physical
+device operations to the authenticated Windows bridge. Neither mode uses or
+exposes MQTT.

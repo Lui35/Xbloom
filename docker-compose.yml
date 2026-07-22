@@ -10,6 +10,10 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       XBLOOM_DEVICE_CACHE: /app/data/.xbloom-device.json
       XBLOOM_DATABASE: /app/data/xbloom.db
+      XBLOOM_BLUETOOTH_BRIDGE_URL: http://host.docker.internal:8767
+      XBLOOM_BRIDGE_TOKEN: ${XBLOOM_BRIDGE_TOKEN:-xbloom-local-bridge}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8766:8766"
     volumes:

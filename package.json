@@ -8,6 +8,7 @@
     "dev": "concurrently -k \"npm:dev:api\" \"npm:dev:web\"",
     "dev:web": "vite --host 127.0.0.1",
     "dev:api": "..\\PyBloom\\.venv\\Scripts\\python.exe -m uvicorn server.app:app --host 127.0.0.1 --port 8766 --reload",
+    "bluetooth:bridge": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/start-bluetooth-bridge.ps1",
     "dev:desktop": "concurrently -k \"npm:dev:api\" \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc -b && vite build",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",

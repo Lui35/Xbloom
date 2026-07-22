@@ -4,6 +4,7 @@ import math
 import os
 import sqlite3
 import sys
+import secrets
 from contextlib import asynccontextmanager, closing
 from pathlib import Path
 from typing import Any, Literal
@@ -29,6 +30,34 @@ from xbloom.scanner import discover_devices
 
 DEVICE_CACHE_FILE = Path(os.getenv("XBLOOM_DEVICE_CACHE", PROJECT_ROOT / ".xbloom-device.json"))
 DATABASE_FILE = Path(os.getenv("XBLOOM_DATABASE", PROJECT_ROOT / "xbloom.db"))
+BLUETOOTH_BRIDGE_URL = os.getenv("XBLOOM_BLUETOOTH_BRIDGE_URL", "").rstrip("/")
+BLUETOOTH_BRIDGE_TOKEN = os.getenv("XBLOOM_BRIDGE_TOKEN", "xbloom-local-bridge")
+IS_BLUETOOTH_BRIDGE = os.getenv("XBLOOM_BRIDGE_SERVER", "") == "1"
+
+
+async def forward_to_bluetooth_bridge(
+    method: str, path: str, payload: dict[str, Any] | None = None
+) -> Any:
+    if not BLUETOOTH_BRIDGE_URL:
+        return None
+    headers = {"X-XBloom-Bridge-Token": BLUETOOTH_BRIDGE_TOKEN}
+    try:
+        async with httpx.AsyncClient(timeout=45) as session:
+            response = await session.request(
+                method, f"{BLUETOOTH_BRIDGE_URL}{path}", json=payload, headers=headers
+            )
+    except httpx.RequestError as error:
+        raise HTTPException(
+            503,
+            "The Windows Bluetooth bridge is not running. Start it with npm run bluetooth:bridge.",
+        ) from error
+    if response.is_error:
+        try:
+            detail = response.json().get("detail", response.text)
+        except ValueError:
+            detail = response.text
+        raise HTTPException(response.status_code, detail or "Bluetooth bridge request failed.")
+    return response.json()
 
 
 def initialize_database() -> None:
@@ -467,9 +496,25 @@ app = FastAPI(title="xBloom Local", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"], allow_methods=["*"], allow_headers=["*"])
 
 
+@app.middleware("http")
+async def protect_bluetooth_bridge(request, call_next):
+    if IS_BLUETOOTH_BRIDGE and request.url.path.startswith("/api/") and request.url.path not in ("/api/health",):
+        supplied = request.headers.get("X-XBloom-Bridge-Token", "")
+        if not BLUETOOTH_BRIDGE_TOKEN or not secrets.compare_digest(supplied, BLUETOOTH_BRIDGE_TOKEN):
+            from fastapi.responses import JSONResponse
+
+            return JSONResponse(status_code=401, content={"detail": "Invalid Bluetooth bridge token."})
+    return await call_next(request)
+
+
 @app.get("/api/health")
 async def health():
-    return {"ok": True, "pybloom": str(PYBLOOM_SRC), "aiConfigured": bool(os.getenv("GEMINI_API_KEY"))}
+    return {
+        "ok": True,
+        "pybloom": str(PYBLOOM_SRC),
+        "aiConfigured": bool(os.getenv("GEMINI_API_KEY")),
+        "bluetoothMode": "bridge-server" if IS_BLUETOOTH_BRIDGE else ("host-bridge" if BLUETOOTH_BRIDGE_URL else "native"),
+    }
 
 
 @app.get("/api/data", response_model=AppDataPayload)
@@ -583,12 +628,16 @@ Taste feedback: {request.feedback}"""
 
 @app.get("/api/devices")
 async def devices():
+    if BLUETOOTH_BRIDGE_URL:
+        return await forward_to_bluetooth_bridge("GET", "/api/devices")
     found = await discover_devices(timeout=7)
     return [{"name": d.name or "xBloom", "address": d.address} for d in found]
 
 
 @app.post("/api/connect")
 async def connect(request: ConnectRequest):
+    if BLUETOOTH_BRIDGE_URL:
+        return await forward_to_bluetooth_bridge("POST", "/api/connect", request.model_dump())
     global client, device_address
     if client and client.is_connected:
         return status_payload()
@@ -638,6 +687,8 @@ async def connect(request: ConnectRequest):
 
 @app.post("/api/bluetooth/settings")
 async def open_bluetooth_settings():
+    if BLUETOOTH_BRIDGE_URL:
+        return await forward_to_bluetooth_bridge("POST", "/api/bluetooth/settings")
     if sys.platform != "win32":
         raise HTTPException(400, "Bluetooth settings shortcut is only available on Windows.")
     os.startfile("ms-settings:bluetooth")
@@ -646,6 +697,8 @@ async def open_bluetooth_settings():
 
 @app.post("/api/disconnect")
 async def disconnect():
+    if BLUETOOTH_BRIDGE_URL:
+        return await forward_to_bluetooth_bridge("POST", "/api/disconnect")
     global client
     if client and client.is_connected:
         client._cleanup_on_disconnect = False
@@ -656,11 +709,15 @@ async def disconnect():
 
 @app.get("/api/status")
 async def get_status():
+    if BLUETOOTH_BRIDGE_URL:
+        return await forward_to_bluetooth_bridge("GET", "/api/status")
     return status_payload()
 
 
 @app.post("/api/brew")
 async def brew(request: BrewRequest):
+    if BLUETOOTH_BRIDGE_URL:
+        return await forward_to_bluetooth_bridge("POST", "/api/brew", request.model_dump())
     if not request.confirmed:
         raise HTTPException(400, "Physical brew confirmation is required.")
     if not client or not client.is_connected:
@@ -690,6 +747,8 @@ async def brew(request: BrewRequest):
 
 @app.post("/api/stop")
 async def stop():
+    if BLUETOOTH_BRIDGE_URL:
+        return await forward_to_bluetooth_bridge("POST", "/api/stop")
     if not client or not client.is_connected:
         raise HTTPException(409, "The machine is not connected.")
     await client.stop_recipe()
