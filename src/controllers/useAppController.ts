@@ -5,6 +5,20 @@ import type { Bean, BrewRecord, BrewSample, Pour, Recipe } from "../domain/model
 import { blankBean, initialRecipes } from "../domain/recipes";
 import { estimateBrew, formatTime } from "../domain/brewing";
 
+const NAV_ROUTES: Record<string, string> = {
+  Home: "/home",
+  Recipes: "/recipes",
+  Beans: "/beans",
+  History: "/history",
+  Settings: "/settings",
+  Brew: "/brew",
+};
+
+function navFromPath(pathname: string) {
+  const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return Object.entries(NAV_ROUTES).find(([, path]) => path === normalized)?.[0] || "Home";
+}
+
 export function useAppController() {
   const [connected, setConnected] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -101,7 +115,7 @@ export function useAppController() {
     brewerWasActive = useRef(false),
     brewWeightBaseline = useRef(0),
     brewRecorded = useRef(false);
-  const [nav, setNavState] = useState("Home");
+  const [nav, setNavState] = useState(() => navFromPath(window.location.pathname));
   const navItems = useMemo(
     () => [
       { name: "Home", icon: LayoutDashboard },
@@ -142,7 +156,7 @@ export function useAppController() {
     return () => window.clearTimeout(timer);
   }, [beans, recipes, history, dataHydrated]);
 
-  function setNav(next: string) {
+  function applyNavigation(next: string, updateUrl: boolean) {
     if (nav === "Recipes" && next !== "Recipes" && recipeDirty) {
       setRecipes(structuredClone(savedRecipes.current));
       setRecipeDirty(false);
@@ -153,7 +167,40 @@ export function useAppController() {
       setSelectedBeanId(null);
     }
     setNavState(next);
+    const route = NAV_ROUTES[next] || NAV_ROUTES.Home;
+    if (updateUrl && window.location.pathname !== route) {
+      window.history.pushState({ nav: next }, "", route);
+    }
   }
+
+  function setNav(next: string) {
+    applyNavigation(next, true);
+  }
+
+  useEffect(() => {
+    const initialNav = navFromPath(window.location.pathname);
+    const canonicalRoute = NAV_ROUTES[initialNav];
+    if (window.location.pathname !== canonicalRoute) {
+      window.history.replaceState({ nav: initialNav }, "", canonicalRoute);
+    }
+  }, []);
+  useEffect(() => {
+    const handlePopState = () => applyNavigation(navFromPath(window.location.pathname), false);
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  });
+  useEffect(() => {
+    document.title = `${nav} · xBloom`;
+  }, [nav]);
+  useEffect(() => {
+    if (!connected) return;
+    const guardConnectedMachine = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", guardConnectedMachine);
+    return () => window.removeEventListener("beforeunload", guardConnectedMachine);
+  }, [connected]);
 
   useEffect(() => {
     if (!libraryMessage) return;
