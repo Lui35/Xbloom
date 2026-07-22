@@ -50,6 +50,15 @@ export function useAppController() {
   const [aiResult, setAiResult] = useState<AIRecipeResult | null>(null);
   const [aiFeedback, setAiFeedback] = useState("");
   const [aiRating, setAiRating] = useState(4);
+  const [aiChooseGoals, setAiChooseGoals] = useState(true);
+  const [aiRecipeGoals, setAiRecipeGoals] = useState<string[]>([]);
+  const [tastePreferences, setTastePreferences] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("xbloom-taste-preferences") || "[]");
+    } catch {
+      return [];
+    }
+  });
   const [beans, setBeans] = useState<Bean[]>(() => {
     try {
       return JSON.parse(localStorage.getItem("xbloom-beans") || "[]").map((bean: Bean) => ({
@@ -463,6 +472,8 @@ export function useAppController() {
     setAiResult(null);
     setAiError("");
     setAiFeedback("");
+    setAiChooseGoals(true);
+    setAiRecipeGoals([]);
     const linked = bean || beans.find((b) => b.id === selected.beanId);
     if (linked) {
       setAiBean({ ...linked });
@@ -504,9 +515,13 @@ export function useAppController() {
     setAiResult(null);
     const beanForAI = {
       ...aiBean,
+      brew_style: aiMode === "enhance" ? selected.brewStyle : aiBean.brew_style,
       cups: aiBean.cups || 1,
       dose: undefined,
       target_water: undefined,
+      recipe_goals: aiChooseGoals ? [] : aiRecipeGoals,
+      ai_choose_goals: aiChooseGoals,
+      user_preferences: tastePreferences,
     };
     try {
       setAiResult(
@@ -694,10 +709,12 @@ export function useAppController() {
       return;
     }
     if (!window.confirm(`Remove “${selected.name}” from your recipes?`)) return;
-    const remaining = recipes.filter((r) => r.id !== selected.id);
+    const remaining = savedRecipes.current.filter((r) => r.id !== selected.id);
+    savedRecipes.current = structuredClone(remaining);
+    localStorage.setItem("xbloom-recipes", JSON.stringify(remaining));
     setRecipes(remaining);
     setSelectedId(remaining[0].id);
-    setRecipeDirty(true);
+    setRecipeDirty(false);
   }
 
   async function toggleConnection() {
@@ -821,6 +838,15 @@ export function useAppController() {
     setAiFeedback,
     aiRating,
     setAiRating,
+    aiChooseGoals,
+    setAiChooseGoals,
+    aiRecipeGoals,
+    setAiRecipeGoals,
+    tastePreferences,
+    setTastePreferences: (preferences: string[]) => {
+      setTastePreferences(preferences);
+      localStorage.setItem("xbloom-taste-preferences", JSON.stringify(preferences));
+    },
     beans,
     aiBean,
     setAiBean,

@@ -1,4 +1,4 @@
-import { CheckCircle2, Circle, Coffee, LoaderCircle, Save, Sparkles, X } from "lucide-react";
+import { Check, CheckCircle2, Circle, Coffee, LoaderCircle, Save, Sparkles, X } from "lucide-react";
 import type { AIBeanProfile } from "../api";
 import type { AppController } from "../controllers/useAppController";
 import { processDetailConfig } from "../domain/beanProcessing";
@@ -22,12 +22,28 @@ export function AppModals({ controller }: { controller: AppController }) {
     setAiFeedback,
     aiRating,
     setAiRating,
+    aiChooseGoals,
+    setAiChooseGoals,
+    aiRecipeGoals,
+    setAiRecipeGoals,
+    tastePreferences,
+    setTastePreferences,
     aiLoading,
     aiElapsed,
     aiError,
     runAI,
     saveAIRecipe,
   } = controller;
+  const tasteOptions = [
+    { id: "sweetness", label: "More sweetness", detail: "Round, ripe, caramel-like" },
+    { id: "full body", label: "Fuller body", detail: "Rich, weighty mouthfeel" },
+    { id: "clarity", label: "More clarity", detail: "Distinct, separated notes" },
+    { id: "bright acidity", label: "Bright & lively", detail: "Juicy, vibrant acidity" },
+    { id: "low acidity", label: "Smooth & mellow", detail: "Softer acidity, easy finish" },
+    { id: "intense flavor", label: "Stronger flavor", detail: "Bold, concentrated cup" },
+  ];
+  const toggleValue = (values: string[], value: string, update: (next: string[]) => void) =>
+    update(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
   const processDetail = processDetailConfig(aiBean.process);
   const uncertain = (field: string) =>
     aiBean.aiConfidence?.[field] !== undefined && aiBean.aiConfidence[field] < 0.75
@@ -387,34 +403,80 @@ export function AppModals({ controller }: { controller: AppController }) {
               )}
             </div>
             {!aiResult && !aiLoading && aiMode === "create" && (
-              <div className="ai-form">
-                <label>
-                  Brew style
-                  <select
-                    value={aiBean.brew_style}
-                    onChange={(e) =>
-                      setAiBean({
-                        ...aiBean,
-                        brew_style: e.target.value as AIBeanProfile["brew_style"],
-                      })
-                    }
-                  >
-                    <option value="hot">Hot</option>
-                    <option value="iced">Iced pour-over</option>
-                    <option value="cold">Cold</option>
-                  </select>
-                </label>
-                <label>
-                  How many cups?
-                  <select
-                    value={aiBean.cups || 1}
-                    onChange={(e) => setAiBean({ ...aiBean, cups: +e.target.value as 1 | 2 | 3 })}
-                  >
-                    <option value={1}>1 cup</option>
-                    <option value={2}>2 cups</option>
-                    <option value={3}>3 smaller cups</option>
-                  </select>
-                </label>
+              <div className="ai-recipe-setup">
+                <div className="ai-form ai-brew-basics">
+                  <label>
+                    Brew style
+                    <select
+                      value={aiBean.brew_style}
+                      onChange={(e) =>
+                        setAiBean({
+                          ...aiBean,
+                          brew_style: e.target.value as AIBeanProfile["brew_style"],
+                        })
+                      }
+                    >
+                      <option value="hot">Hot</option>
+                      <option value="iced">Iced pour-over</option>
+                      <option value="cold">Cold</option>
+                    </select>
+                  </label>
+                  <label>
+                    How many cups?
+                    <select
+                      value={aiBean.cups || 1}
+                      onChange={(e) => setAiBean({ ...aiBean, cups: +e.target.value as 1 | 2 | 3 })}
+                    >
+                      <option value={1}>1 cup</option>
+                      <option value={2}>2 cups</option>
+                      <option value={3}>3 smaller cups</option>
+                    </select>
+                  </label>
+                </div>
+                <section className="taste-target-section">
+                  <div className="taste-section-heading">
+                    <span><small>RECIPE DIRECTION</small><b>What should this recipe emphasize?</b></span>
+                    <button
+                      className={aiChooseGoals ? "ai-choice active" : "ai-choice"}
+                      type="button"
+                      aria-pressed={aiChooseGoals}
+                      onClick={() => setAiChooseGoals(!aiChooseGoals)}
+                    >
+                      <Sparkles /> <span>Let AI choose<small>Best fit for these beans</small></span>
+                    </button>
+                  </div>
+                  <div className={aiChooseGoals ? "taste-options disabled" : "taste-options"}>
+                    {tasteOptions.map((option) => {
+                      const selected = aiRecipeGoals.includes(option.id);
+                      return (
+                        <button key={option.id} type="button" aria-pressed={selected}
+                          className={selected ? "taste-option selected" : "taste-option"}
+                          disabled={aiChooseGoals}
+                          onClick={() => toggleValue(aiRecipeGoals, option.id, setAiRecipeGoals)}>
+                          <i>{selected && <Check />}</i>
+                          <span><b>{option.label}</b><small>{option.detail}</small></span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+                <section className="taste-target-section preference-section">
+                  <div className="taste-section-heading">
+                    <span><small>YOUR TASTE PROFILE</small><b>What do you usually enjoy?</b></span>
+                    <em>Saved automatically</em>
+                  </div>
+                  <div className="preference-chips">
+                    {tasteOptions.map((option) => (
+                      <button key={option.id} type="button"
+                        className={tastePreferences.includes(option.id) ? "selected" : ""}
+                        aria-pressed={tastePreferences.includes(option.id)}
+                        onClick={() => toggleValue(tastePreferences, option.id, setTastePreferences)}>
+                        {tastePreferences.includes(option.id) && <CheckCircle2 />}{option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p>These preferences guide AI gently; the bean’s character still comes first.</p>
+                </section>
               </div>
             )}
             {!aiResult && !aiLoading && aiMode === "enhance" && (

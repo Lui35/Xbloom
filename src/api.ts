@@ -32,6 +32,9 @@ export type AIBeanProfile = {
   roast_date?: string;
   tasting_notes?: string;
   desired_cup?: string;
+  recipe_goals?: string[];
+  ai_choose_goals?: boolean;
+  user_preferences?: string[];
 };
 export type AIRecipeResult = {
   name: string;

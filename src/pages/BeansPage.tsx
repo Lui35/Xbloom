@@ -5,6 +5,7 @@ import {
   Coffee,
   ImageUp,
   LoaderCircle,
+  Pencil,
   Plus,
   Search,
   Sparkles,
@@ -169,12 +170,24 @@ export function BeansPage({
                 </div>
                 <div className="bean-card-content">
                   <div className="bean-card-heading">
-                    <small>{bean.roaster || "YOUR COFFEE"}</small>
-                    <h3>{bean.name}</h3>
-                    {age !== null && (
-                      <span className={age > 45 ? "roast-age warning" : "roast-age"}>
-                        {age === 0 ? "Roasted today" : `${age} days from roast`}
-                      </span>
+                    <div className="bean-card-title">
+                      <small>{bean.roaster || "YOUR COFFEE"}</small>
+                      <h3>{bean.name}</h3>
+                      {age !== null && (
+                        <span className={age > 45 ? "roast-age warning" : "roast-age"}>
+                          {age === 0 ? "Roasted today" : `${age} days from roast`}
+                        </span>
+                      )}
+                    </div>
+                    {!bean.archived && (
+                      <button
+                        className="bean-ai-action"
+                        onClick={() => openAI("create", bean)}
+                        title="Create an AI recipe for this bean"
+                      >
+                        <Sparkles aria-hidden="true" />
+                        <span>Create recipe</span>
+                      </button>
                     )}
                   </div>
                   <p className="bean-card-origin">
@@ -243,17 +256,13 @@ export function BeansPage({
                   )}
                 </div>
                 <footer>
-                  {!bean.archived && (
-                    <button className="ai-button" onClick={() => openAI("create", bean)}>
-                      <Sparkles size={16} /> Create recipe with AI
-                    </button>
-                  )}
                   <span className="bean-card-actions">
-                    <button className="ai-secondary" onClick={() => openBeanEditor(bean)}>
-                      Edit
+                    <button className="bean-card-action" onClick={() => openBeanEditor(bean)}>
+                      <Pencil aria-hidden="true" />
+                      <span>Edit</span>
                     </button>
                     <button
-                      className="bean-archive"
+                      className="bean-card-action bean-archive"
                       onClick={() =>
                         saveBeans(
                           beans.map((item) =>
@@ -262,8 +271,8 @@ export function BeansPage({
                         )
                       }
                     >
-                      {bean.archived ? <ArchiveRestore /> : <Archive />}
-                      {bean.archived ? "Restore" : "Archive"}
+                      {bean.archived ? <ArchiveRestore aria-hidden="true" /> : <Archive aria-hidden="true" />}
+                      <span>{bean.archived ? "Restore" : "Archive"}</span>
                     </button>
                   </span>
                 </footer>

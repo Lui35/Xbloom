@@ -118,6 +118,9 @@ class BeanProfile(BaseModel):
     roast_date: str | None = Field(default=None, max_length=30)
     tasting_notes: str | None = Field(default=None, max_length=300)
     desired_cup: str | None = Field(default=None, max_length=400)
+    recipe_goals: list[str] = Field(default_factory=list, max_length=6)
+    ai_choose_goals: bool = True
+    user_preferences: list[str] = Field(default_factory=list, max_length=6)
 
 
 class AIRecipePour(BaseModel):
@@ -212,7 +215,19 @@ def normalize_ai_recipe(raw: str) -> dict[str, Any]:
 
 
 def recommended_pour_count(profile: BeanProfile, target_water: int, dose: float) -> int:
-    details = " ".join(filter(None, (profile.roast_level, profile.process, profile.tasting_notes, profile.desired_cup))).lower()
+    details = " ".join(
+        filter(
+            None,
+            (
+                profile.roast_level,
+                profile.process,
+                profile.tasting_notes,
+                profile.desired_cup,
+                " ".join(profile.recipe_goals),
+                " ".join(profile.user_preferences),
+            ),
+        )
+    ).lower()
     roast = (profile.roast_level or "").lower()
     body_markers = ("full body", "low acidity", "chocolate", "nutty", "nuts")
     clarity_markers = ("light", "washed", "clarity", "floral", "tea-like", "high extraction", "delicate")
@@ -243,6 +258,11 @@ def fit_recipe_to_profile(recipe: AIRecipeResult, profile: BeanProfile) -> AIRec
         target_water = machine_water
     else:
         target_water = profile.target_water if profile.target_water is not None else sum(p.volume for p in recipe.pours)
+    gross_water = target_water + ice_grams if profile.brew_style == "iced" else target_water
+    if profile.dose is None and not 14.5 <= gross_water / dose <= 18.5:
+        # The model is allowed to choose both serving size and dose. Reconcile an
+        # otherwise useful proposal instead of rejecting it for a mismatched ratio.
+        dose = max(5.0, min(30.0, round(gross_water / 16, 1)))
     count = recommended_pour_count(profile, target_water, dose)
     pours = list(recipe.pours[:count])
     while len(pours) < count:
@@ -258,6 +278,18 @@ def fit_recipe_to_profile(recipe: AIRecipeResult, profile: BeanProfile) -> AIRec
             "volume": volume,
             "pauseAfter": max(15, min(45, pour.pauseAfter or 30)) if index == 0 else (0 if index == count - 1 else pour.pauseAfter),
         }))
+    estimated_seconds = sum(pour.volume / pour.flow + pour.pauseAfter for pour in fitted)
+    pause_needed = max(0, math.ceil(105 - estimated_seconds))
+    for index in range(max(0, len(fitted) - 1)):
+        if pause_needed == 0:
+            break
+        limit = 45 if index == 0 else 60
+        available = max(0, limit - fitted[index].pauseAfter)
+        added = min(available, pause_needed)
+        fitted[index] = fitted[index].model_copy(
+            update={"pauseAfter": fitted[index].pauseAfter + added}
+        )
+        pause_needed -= added
     return recipe.model_copy(update={
         "dose": dose,
         "brew_style": profile.brew_style,
@@ -298,7 +330,7 @@ def recipe_quality_issues(recipe: AIRecipeResult, profile: BeanProfile) -> list[
     if len(recipe.pours) != expected_pours:
         issues.append(f"this coffee profile calls for {expected_pours} pours, not {len(recipe.pours)}")
     bloom = recipe.pours[0]
-    bloom_min, bloom_max = recipe.dose * 2, recipe.dose * 4
+    bloom_min, bloom_max = round(recipe.dose * 2), round(recipe.dose * 4)
     if not bloom_min <= bloom.volume <= bloom_max:
         issues.append(f"bloom should be about 2-4x dose ({bloom_min:.0f}-{bloom_max:.0f} ml)")
     if not 15 <= bloom.pauseAfter <= 45:
@@ -462,6 +494,11 @@ async def generate_ai_recipe(profile: BeanProfile):
     prompt = f"""You are an expert specialty-coffee recipe designer for an xBloom Studio.
 Create one practical recipe from the bean profile below.
 Return only the requested JSON schema. Respect every numeric schema limit.
+If ai_choose_goals is true, choose the cup direction that best expresses this
+specific coffee, using user_preferences only as a gentle tie-breaker. If it is
+false, deliberately optimize for recipe_goals while keeping the recipe balanced.
+Translate goals into brewing choices instead of merely repeating their names in
+the rationale. Never try to maximize every sensory attribute at once.
 You choose the coffee dose, total machine water, and (only for iced pour-over)
 ice weight for the requested cups and brew style. Pour volumes are ONLY water
 delivered by the xBloom and must never include ice. Use roughly 180-260 ml per
