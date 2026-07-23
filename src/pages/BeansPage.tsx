@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import type { Bean, Recipe } from "../domain/models";
 import { processDetailConfig } from "../domain/beanProcessing";
+import { beanInitialWeight, beanRemainingWeight } from "../domain/inventory";
 
 type Props = {
   beans: Bean[];
@@ -153,8 +154,8 @@ export function BeansPage({
             const age = roastAge(bean);
             const linkedRecipes = recipes.filter((recipe) => recipe.beanId === bean.id);
             const typicalDose = linkedRecipes[0]?.dose || 18;
-            const initial = bean.initialWeightGrams || 250;
-            const remaining = Math.max(0, bean.remainingWeightGrams ?? initial);
+            const initial = beanInitialWeight(bean);
+            const remaining = beanRemainingWeight(bean);
             const percent = Math.min(100, (remaining / initial) * 100);
             const uncertain = Object.entries(bean.aiConfidence || {}).filter(
               ([, score]) => score < 0.75,

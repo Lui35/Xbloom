@@ -4,6 +4,7 @@ import { AIRecipeResult, GeminiModel, MachineStatus, xbloomApi } from "../api";
 import type { Bean, BrewRecord, BrewSample, Pour, Recipe } from "../domain/models";
 import { blankBean, initialRecipes } from "../domain/recipes";
 import { estimateBrew, formatTime } from "../domain/brewing";
+import { deductBeanDose, normalizeBeanInventory } from "../domain/inventory";
 
 const NAV_ROUTES: Record<string, string> = {
   Home: "/home",
@@ -75,10 +76,12 @@ export function useAppController() {
   });
   const [beans, setBeans] = useState<Bean[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem("xbloom-beans") || "[]").map((bean: Bean) => ({
-        ...bean,
-        process_detail: bean.process_detail || bean.infused_with || "",
-      }));
+      return JSON.parse(localStorage.getItem("xbloom-beans") || "[]").map((bean: Bean) =>
+        normalizeBeanInventory({
+          ...bean,
+          process_detail: bean.process_detail || bean.infused_with || "",
+        }),
+      );
     } catch {
       return [];
     }
@@ -144,7 +147,8 @@ export function useAppController() {
       .loadData()
       .then((data) => {
         if (!active) return;
-        if (data.beans.length) setBeans(data.beans as Bean[]);
+        if (data.beans.length)
+          setBeans((data.beans as Bean[]).map((bean) => normalizeBeanInventory(bean)));
         if (data.recipes.length) {
           const loaded = data.recipes as Recipe[];
           setRecipes(loaded);
@@ -257,13 +261,24 @@ export function useAppController() {
   }, [connected, telemetry.waterLevelOk]);
   const brewEstimate = estimateBrew(selected, elapsed);
   useEffect(() => {
-    if (!brewing || brewTimingStarted || !telemetry.brewerRunning) return;
+    const waterFlowStarted =
+      telemetry.state === "brewing" &&
+      telemetry.brewerRunning === true &&
+      telemetry.grinderRunning !== true;
+    if (!brewing || brewTimingStarted || !waterFlowStarted) return;
     brewStart.current = Date.now();
     brewWeightBaseline.current = telemetry.weight || brewWeightBaseline.current;
     setElapsed(0);
     setSamples([{ time: 0, water: 0, coffee: 0 }]);
     setBrewTimingStarted(true);
-  }, [brewing, brewTimingStarted, telemetry.brewerRunning, telemetry.weight]);
+  }, [
+    brewing,
+    brewTimingStarted,
+    telemetry.state,
+    telemetry.brewerRunning,
+    telemetry.grinderRunning,
+    telemetry.weight,
+  ]);
   useEffect(() => {
     if (!brewing || !brewTimingStarted) return;
     setSamples((list) =>
@@ -320,15 +335,7 @@ export function useAppController() {
     if (selected.beanId) {
       setBeans((current) => {
         const next = current.map((bean) =>
-          bean.id === selected.beanId
-            ? {
-                ...bean,
-                remainingWeightGrams: Math.max(
-                  0,
-                  (bean.remainingWeightGrams ?? bean.initialWeightGrams ?? 0) - selected.dose,
-                ),
-              }
-            : bean,
+          bean.id === selected.beanId ? deductBeanDose(bean, selected.dose) : bean,
         );
         try {
           localStorage.setItem("xbloom-beans", JSON.stringify(next));
